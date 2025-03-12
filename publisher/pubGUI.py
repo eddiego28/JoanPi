@@ -2,10 +2,9 @@ import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
-    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox,
-    QListWidget, QListWidgetItem
+    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 from .pubEditor import PublisherEditorWidget
@@ -71,8 +70,6 @@ class PublisherMessageViewer(QWidget):
         self.setFixedHeight(200)
 
     def add_message(self, realms, topic, timestamp, details):
-        if isinstance(details, str):
-            details = details.replace("\n", " ")
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(timestamp))
@@ -92,49 +89,40 @@ class PublisherTab(QWidget):
         super().__init__(parent)
         self.msgWidgets = []
         self.next_id = 1
-        self.realms_topics = {}    # Global: realm -> [topics]
-        self.realm_configs = {}    # Global: realm -> router URL
+        self.realms_topics = {}    # Se cargará desde el archivo global
+        self.realm_configs = {}    # Se cargará desde el archivo global
         self.initUI()
-        self.autoLoadRealmsTopics()  # Carga configuración global
+        self.loadGlobalRealmTopicConfig()  # Se carga al iniciar
 
     def initUI(self):
         layout = QVBoxLayout()
 
         # Barra de herramientas por grupos
         toolbar = QHBoxLayout()
-
-        # Grupo Mensajes (Agregar / Eliminar mensaje)
+        # Grupo Mensajes
         groupMensajes = QHBoxLayout()
         btnAgregar = QPushButton("Agregar mensaje")
         btnAgregar.clicked.connect(self.addMessage)
-        btnAgregar.setStyleSheet("background-color: #AED6F1; font-weight: bold;")
         groupMensajes.addWidget(btnAgregar)
-        btnEliminar = QPushButton("Eliminar mensaje seleccionado")
+        btnEliminar = QPushButton("Eliminar mensaje")
         btnEliminar.clicked.connect(self.deleteSelectedMessage)
-        btnEliminar.setStyleSheet("background-color: #AED6F1; font-weight: bold;")
         groupMensajes.addWidget(btnEliminar)
         toolbar.addLayout(groupMensajes)
-
-        # Grupo Carga (Cargar Proyecto / Cargar Realm/Topic)
+        # Grupo Carga
         groupCarga = QHBoxLayout()
         btnCargarProj = QPushButton("Cargar Proyecto")
         btnCargarProj.clicked.connect(self.loadProject)
-        btnCargarProj.setStyleSheet("background-color: #A9DFBF;")
         groupCarga.addWidget(btnCargarProj)
-        btnCargarRT = QPushButton("Cargar Realm/Topic")
-        btnCargarRT.clicked.connect(self.loadRealmsTopics)
-        btnCargarRT.setStyleSheet("background-color: #A9DFBF;")
-        groupCarga.addWidget(btnCargarRT)
+        btnRecargarRT = QPushButton("Recargar Realm/Topic")
+        btnRecargarRT.clicked.connect(self.loadGlobalRealmTopicConfig)
+        groupCarga.addWidget(btnRecargarRT)
         toolbar.addLayout(groupCarga)
-
-        # Grupo Envío (Enviar Mensaje Instantáneo)
+        # Grupo Envío
         groupEnvio = QHBoxLayout()
-        btnEnviar = QPushButton("Enviar Mensaje Instantáneo")
+        btnEnviar = QPushButton("Enviar Mensaje")
         btnEnviar.clicked.connect(self.sendAllAsync)
-        btnEnviar.setStyleSheet("background-color: #F9E79F;")
         groupEnvio.addWidget(btnEnviar)
         toolbar.addLayout(groupEnvio)
-
         layout.addLayout(toolbar)
 
         # Área de mensajes
@@ -162,6 +150,24 @@ class PublisherTab(QWidget):
         layout.addWidget(QLabel("Resumen de mensajes enviados:"))
         layout.addWidget(self.viewer)
         self.setLayout(layout)
+
+    def loadGlobalRealmTopicConfig(self):
+        # Busca y carga el archivo config/realm_topic_config.json
+        config_path = os.path.join(os.path.dirname(__file__), "..", "config", "realm_topic_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.realms_topics = data.get("realms", {})
+                self.realm_configs = data.get("realm_configs", {})
+                # Actualiza los widgets de los mensajes existentes
+                for widget in self.msgWidgets:
+                    widget.updateRealmsTopics(self.realms_topics)
+                print("Configuración global de realms/topics cargada.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error al cargar la configuración global:\n{e}")
+        else:
+            QMessageBox.warning(self, "Advertencia", "No se encontró el archivo realm_topic_config.json.")
 
     def deleteSelectedMessage(self):
         if self.msgWidgets:
@@ -277,7 +283,7 @@ class PublisherTab(QWidget):
         QMessageBox.information(self, "Proyecto", "Proyecto cargado correctamente.")
 
     def loadRealmsTopics(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Realms/Topic", "", "JSON Files (*.json);;All Files (*)")
+        filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Realm/Topic", "", "JSON Files (*.json);;All Files (*)")
         if not filepath:
             return
         try:
@@ -287,12 +293,12 @@ class PublisherTab(QWidget):
             self.realm_configs = data.get("realm_configs", self.realm_configs)
             for widget in self.msgWidgets:
                 widget.updateRealmsTopics(self.realms_topics)
-            QMessageBox.information(self, "Realms/Topic", "Realms y Topics cargados correctamente.")
+            QMessageBox.information(self, "Realm/Topic", "Realm y Topics recargados correctamente.")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo cargar Realms/Topic:\n{e}")
+            QMessageBox.critical(self, "Error", f"No se pudo cargar Realm/Topic:\n{e}")
 
     def autoLoadRealmsTopics(self):
-        default_path = os.path.join(os.path.dirname(__file__), "..", "config", "realms_topics.json")
+        default_path = os.path.join(os.path.dirname(__file__), "..", "config", "realm_topic_config.json")
         if os.path.exists(default_path):
             try:
                 with open(default_path, "r", encoding="utf-8") as f:
@@ -301,8 +307,9 @@ class PublisherTab(QWidget):
                 self.realm_configs = data.get("realm_configs", self.realm_configs)
                 for widget in self.msgWidgets:
                     widget.updateRealmsTopics(self.realms_topics)
+                print("Realm/Topic global cargado automáticamente.")
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error al cargar Realms/Topic por defecto:\n{e}")
+                QMessageBox.critical(self, "Error", f"Error al cargar Realm/Topic global:\n{e}")
 
 # Clase para cada mensaje (escenario)
 class MessageConfigWidget(QGroupBox):
@@ -327,7 +334,7 @@ class MessageConfigWidget(QGroupBox):
         self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
         self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         formLayout.addRow("Realms:", self.realmTable)
-        # Botones para gestionar realms en la tabla
+        # Botones para gestionar realms
         realmBtnLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo realm")
@@ -359,7 +366,7 @@ class MessageConfigWidget(QGroupBox):
         self.delTopicBtn.setStyleSheet("background-color: #F9E79F;")
         topicBtnLayout.addWidget(self.delTopicBtn)
         formLayout.addRow("", topicBtnLayout)
-        # Campo Default Router URL (si la tabla no tiene URL definida)
+        # Campo Default Router URL (se usará si la tabla no tiene URL definida)
         self.defaultUrlEdit = QLineEdit("ws://127.0.0.1:60001")
         formLayout.addRow("Default Router URL:", self.defaultUrlEdit)
         # Modo de envío
@@ -462,7 +469,7 @@ class MessageConfigWidget(QGroupBox):
             itemRealm.setFlags(itemRealm.flags() | Qt.ItemIsUserCheckable)
             itemRealm.setCheckState(Qt.Checked)
             self.realmTable.setItem(row, 0, itemRealm)
-            url = ""
+            url = self.publisherTab.realm_configs.get(realm, "")
             self.realmTable.setItem(row, 1, QTableWidgetItem(url))
         self.updateTopicsFromRealms()
 

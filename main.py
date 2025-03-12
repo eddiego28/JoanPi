@@ -69,11 +69,4 @@ class MainWindow(QMainWindow):
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(proj_config, f, indent=2, ensure_ascii=False)
             QMessageBox.information(self, "Proyecto", "Proyecto guardado correctamente.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo guardar el proyecto:\n{e}")
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+        except E

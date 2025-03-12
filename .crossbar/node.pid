@@ -1,0 +1,22 @@
+{
+    "pid": 5212, 
+    "argv": [
+        "crossbar", 
+        "start", 
+        "--loglevel", 
+        "debug"
+    ], 
+    "options": {
+        "debug_lifecycle": false, 
+        "debug_programflow": false, 
+        "command": "start", 
+        "color": false, 
+        "loglevel": "debug", 
+        "logformat": "standard", 
+        "logdir": null, 
+        "logtofile": false, 
+        "cbdir": "C:\\Users\\ededi\\Documents\\PROYECTOS\\wamPy_v1.0\\.crossbar", 
+        "config": "config.json", 
+        "shutdownafter": null
+    }
+}

@@ -1,0 +1,6 @@
+{
+  "realms": {
+      "default": ["com.ads.midshmi.topic", "otro.topic"],
+      "ADS.MIDSHMI": ["some.topic", "another.topic"]
+  }
+}

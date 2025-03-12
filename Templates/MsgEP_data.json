@@ -1,0 +1,27 @@
+{
+    "EP": {
+      "common": {
+        "palabra1": {
+          "campo1": "valor1",
+          "campo2": "valor2",
+          "detalles": {
+            "subcampo1": "dato1",
+            "subcampo2": 123,
+            "subcampo3": ["item1", "item2", "item3"]
+          }
+        },
+        
+        "palabra3": {
+          "campo5": "valor5",
+          "campo6": "valor6",
+          "propiedades": {
+            "peso": 75.3,
+            "altura": 1.82,
+            "colores": ["rojo", "verde", "azul"]
+          }
+        }
+      }
+      
+    }
+  }
+  

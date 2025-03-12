@@ -1,0 +1,28 @@
+{
+  "publisher": {
+    "scenarios": [
+      {
+        "id": 1,
+        "realm": "default",
+        "router_url": "ws://127.0.0.1:60001",
+        "topic": "com.ads.midshmi.topic",
+        "time": "00:00:02",
+        "content": {}
+      },
+      {
+        "id": 2,
+        "realm": "default",
+        "router_url": "ws://127.0.0.1:60001",
+        "topic": "com.ads.midshmi.topic",
+        "time": "00:00:05",
+        "content": {}
+      }
+    ]
+  },
+  "subscriber": {
+    "realms": [
+      "default"
+    ],
+    "topics": []
+  }
+}

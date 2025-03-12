@@ -83,23 +83,21 @@ class PublisherMessageViewer(QWidget):
             dlg = JsonDetailDialog(self.pubMessages[row], self)
             dlg.exec_()
 
-# Tab Publicador
+# Tab Publicador: carga global de realms/topics se realiza en loadGlobalRealmTopicConfig()
 class PublisherTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.msgWidgets = []
         self.next_id = 1
-        self.realms_topics = {}    # Se cargará desde el archivo global
-        self.realm_configs = {}    # Se cargará desde el archivo global
+        self.realms_topics = {}    # Cargado desde config/realm_topic_config.json
+        self.realm_configs = {}    # Cargado desde config/realm_topic_config.json
         self.initUI()
-        self.loadGlobalRealmTopicConfig()  # Se carga al iniciar
+        self.loadGlobalRealmTopicConfig()
 
     def initUI(self):
         layout = QVBoxLayout()
-
-        # Barra de herramientas por grupos
+        # Barra de herramientas (grupos sin excesivos colores)
         toolbar = QHBoxLayout()
-        # Grupo Mensajes
         groupMensajes = QHBoxLayout()
         btnAgregar = QPushButton("Agregar mensaje")
         btnAgregar.clicked.connect(self.addMessage)
@@ -108,7 +106,6 @@ class PublisherTab(QWidget):
         btnEliminar.clicked.connect(self.deleteSelectedMessage)
         groupMensajes.addWidget(btnEliminar)
         toolbar.addLayout(groupMensajes)
-        # Grupo Carga
         groupCarga = QHBoxLayout()
         btnCargarProj = QPushButton("Cargar Proyecto")
         btnCargarProj.clicked.connect(self.loadProject)
@@ -117,14 +114,12 @@ class PublisherTab(QWidget):
         btnRecargarRT.clicked.connect(self.loadGlobalRealmTopicConfig)
         groupCarga.addWidget(btnRecargarRT)
         toolbar.addLayout(groupCarga)
-        # Grupo Envío
         groupEnvio = QHBoxLayout()
         btnEnviar = QPushButton("Enviar Mensaje")
         btnEnviar.clicked.connect(self.sendAllAsync)
         groupEnvio.addWidget(btnEnviar)
         toolbar.addLayout(groupEnvio)
         layout.addLayout(toolbar)
-
         # Área de mensajes
         splitter = QSplitter(Qt.Vertical)
         self.msgArea = QScrollArea()
@@ -138,7 +133,6 @@ class PublisherTab(QWidget):
         splitter.addWidget(self.viewer)
         splitter.setSizes([500, 200])
         layout.addWidget(splitter)
-
         # Botón global para iniciar publicador
         connLayout = QHBoxLayout()
         connLayout.addWidget(QLabel("Publicador Global"))
@@ -146,13 +140,11 @@ class PublisherTab(QWidget):
         self.globalStartButton.clicked.connect(self.startPublisher)
         connLayout.addWidget(self.globalStartButton)
         layout.addLayout(connLayout)
-
         layout.addWidget(QLabel("Resumen de mensajes enviados:"))
         layout.addWidget(self.viewer)
         self.setLayout(layout)
 
     def loadGlobalRealmTopicConfig(self):
-        # Busca y carga el archivo config/realm_topic_config.json
         config_path = os.path.join(os.path.dirname(__file__), "..", "config", "realm_topic_config.json")
         if os.path.exists(config_path):
             try:
@@ -160,7 +152,6 @@ class PublisherTab(QWidget):
                     data = json.load(f)
                 self.realms_topics = data.get("realms", {})
                 self.realm_configs = data.get("realm_configs", {})
-                # Actualiza los widgets de los mensajes existentes
                 for widget in self.msgWidgets:
                     widget.updateRealmsTopics(self.realms_topics)
                 print("Configuración global de realms/topics cargada.")
@@ -259,7 +250,8 @@ class PublisherTab(QWidget):
             if self.realms_topics:
                 widget.updateRealmsTopics(self.realms_topics)
             widget.modeCombo.setCurrentText(scenario.get("mode", "On demand"))
-            widget.templateEdit.setText(scenario.get("template", ""))
+            # Se elimina la sección de template, ya que se carga mediante otro mecanismo.
+            widget.templateEdit.setText("")
             self.msgLayout.addWidget(widget)
             self.msgWidgets.append(widget)
             self.next_id += 1
@@ -307,9 +299,9 @@ class PublisherTab(QWidget):
                 self.realm_configs = data.get("realm_configs", self.realm_configs)
                 for widget in self.msgWidgets:
                     widget.updateRealmsTopics(self.realms_topics)
-                print("Realm/Topic global cargado automáticamente.")
+                print("Configuración global de realms/topics cargada automáticamente.")
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error al cargar Realm/Topic global:\n{e}")
+                QMessageBox.critical(self, "Error", f"Error al cargar la configuración global:\n{e}")
 
 # Clase para cada mensaje (escenario)
 class MessageConfigWidget(QGroupBox):
@@ -341,11 +333,9 @@ class MessageConfigWidget(QGroupBox):
         realmBtnLayout.addWidget(self.newRealmEdit)
         self.addRealmBtn = QPushButton("Agregar")
         self.addRealmBtn.clicked.connect(self.addRealmRow)
-        self.addRealmBtn.setStyleSheet("background-color: #AED6F1;")
         realmBtnLayout.addWidget(self.addRealmBtn)
         self.delRealmBtn = QPushButton("Borrar")
         self.delRealmBtn.clicked.connect(self.deleteRealmRow)
-        self.delRealmBtn.setStyleSheet("background-color: #AED6F1;")
         realmBtnLayout.addWidget(self.delRealmBtn)
         formLayout.addRow("", realmBtnLayout)
         # Topics: tabla de 1 columna
@@ -359,30 +349,19 @@ class MessageConfigWidget(QGroupBox):
         topicBtnLayout.addWidget(self.newTopicEdit)
         self.addTopicBtn = QPushButton("Agregar")
         self.addTopicBtn.clicked.connect(self.addTopicRow)
-        self.addTopicBtn.setStyleSheet("background-color: #F9E79F;")
         topicBtnLayout.addWidget(self.addTopicBtn)
         self.delTopicBtn = QPushButton("Borrar")
         self.delTopicBtn.clicked.connect(self.deleteTopicRow)
-        self.delTopicBtn.setStyleSheet("background-color: #F9E79F;")
         topicBtnLayout.addWidget(self.delTopicBtn)
         formLayout.addRow("", topicBtnLayout)
-        # Campo Default Router URL (se usará si la tabla no tiene URL definida)
+        # Campo Default Router URL
         self.defaultUrlEdit = QLineEdit("ws://127.0.0.1:60001")
         formLayout.addRow("Default Router URL:", self.defaultUrlEdit)
         # Modo de envío
         self.modeCombo = QComboBox()
         self.modeCombo.addItems(["Programado", "Hora de sistema", "On demand"])
         formLayout.addRow("Modo:", self.modeCombo)
-        # Template: campo y botón para cargar template
-        templateLayout = QHBoxLayout()
-        self.templateEdit = QLineEdit()
-        self.templateEdit.setPlaceholderText("Nombre template (ej. ejemplo.json)")
-        templateLayout.addWidget(self.templateEdit)
-        self.loadTemplateBtn = QPushButton("Cargar Template")
-        self.loadTemplateBtn.setStyleSheet("background-color: #D2B4DE;")
-        self.loadTemplateBtn.clicked.connect(self.loadTemplate)
-        templateLayout.addWidget(self.loadTemplateBtn)
-        formLayout.addRow("Template:", templateLayout)
+        # (Se elimina la sección de template, pues ya existe otro botón para ello)
         formContainer = QWidget()
         formContainer.setLayout(formLayout)
         contentLayout.addWidget(formContainer)
@@ -390,33 +369,18 @@ class MessageConfigWidget(QGroupBox):
         self.editorWidget = PublisherEditorWidget(parent=self)
         contentLayout.addWidget(self.editorWidget)
         # Barra lateral de botones (Enviar y Eliminar mensaje)
-        sideLayout = QVBoxLayout()
+        sideLayout = QHBoxLayout()
         self.sendButton = QPushButton("Enviar")
         self.sendButton.clicked.connect(self.sendMessage)
-        self.sendButton.setStyleSheet("background-color: #F7DC6F; font-weight: bold;")
         sideLayout.addWidget(self.sendButton)
         self.deleteButton = QPushButton("Eliminar")
         self.deleteButton.clicked.connect(self.deleteSelf)
-        self.deleteButton.setStyleSheet("background-color: #E74C3C; color: white; font-weight: bold;")
         sideLayout.addWidget(self.deleteButton)
         contentLayout.addLayout(sideLayout)
         self.contentWidget.setLayout(contentLayout)
         outerLayout = QVBoxLayout()
         outerLayout.addWidget(self.contentWidget)
         self.setLayout(outerLayout)
-
-    def loadTemplate(self):
-        base_dir = os.path.join(os.path.dirname(__file__), "..", "Templates")
-        filepath, _ = QFileDialog.getOpenFileName(self, "Seleccionar Template", base_dir, "JSON Files (*.json);;All Files (*)")
-        if filepath:
-            self.templateEdit.setText(os.path.basename(filepath))
-            try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    template_data = json.load(f)
-                self.editorWidget.jsonPreview.setPlainText(json.dumps(template_data, indent=2, ensure_ascii=False))
-                QMessageBox.information(self, "Template", "Template cargado correctamente.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"No se pudo cargar el template:\n{e}")
 
     def addRealmRow(self):
         new_realm = self.newRealmEdit.text().strip()
@@ -568,6 +532,7 @@ class MessageConfigWidget(QGroupBox):
             "topics": self.getSelectedTopics(),
             "time": self.editorWidget.commonTimeEdit.text().strip(),
             "mode": self.modeCombo.currentText(),
-            "template": self.templateEdit.text().strip(),
+            "template": self.templateEdit.text().strip(),  # Aunque se elimina el botón, se conserva el campo para referencia
             "content": json.loads(self.editorWidget.jsonPreview.toPlainText())
         }
+

@@ -2,7 +2,8 @@ import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
-    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox
+    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox,
+    QListWidget, QListWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -246,7 +247,7 @@ class PublisherTab(QWidget):
                 itemTopic.setFlags(itemTopic.flags() | Qt.ItemIsUserCheckable)
                 itemTopic.setCheckState(Qt.Checked)
                 widget.topicTable.setItem(row, 0, itemTopic)
-            widget.urlEdit.setText(scenario.get("router_url", "ws://127.0.0.1:60001"))
+            widget.defaultUrlEdit.setText(scenario.get("router_url", "ws://127.0.0.1:60001"))
             widget.editorWidget.commonTimeEdit.setText(scenario.get("time", "00:00:00"))
             widget.editorWidget.jsonPreview.setPlainText(json.dumps(scenario.get("content", {}), indent=2, ensure_ascii=False))
             if self.realms_topics:
@@ -307,7 +308,7 @@ class PublisherTab(QWidget):
 class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, publisherTab):
         super().__init__(publisherTab)
-        self.publisherTab = publisherTab  # Guarda la referencia al PublisherTab
+        self.publisherTab = publisherTab  # Referencia al PublisherTab
         self.msg_id = msg_id
         self.realms_topics = {}  # Configuración local
         self.templatePath = ""
@@ -326,7 +327,7 @@ class MessageConfigWidget(QGroupBox):
         self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
         self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         formLayout.addRow("Realms:", self.realmTable)
-        # Botones para gestionar realms
+        # Botones para gestionar realms en la tabla
         realmBtnLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo realm")
@@ -358,6 +359,9 @@ class MessageConfigWidget(QGroupBox):
         self.delTopicBtn.setStyleSheet("background-color: #F9E79F;")
         topicBtnLayout.addWidget(self.delTopicBtn)
         formLayout.addRow("", topicBtnLayout)
+        # Campo Default Router URL (si la tabla no tiene URL definida)
+        self.defaultUrlEdit = QLineEdit("ws://127.0.0.1:60001")
+        formLayout.addRow("Default Router URL:", self.defaultUrlEdit)
         # Modo de envío
         self.modeCombo = QComboBox()
         self.modeCombo.addItems(["Programado", "Hora de sistema", "On demand"])
@@ -510,7 +514,7 @@ class MessageConfigWidget(QGroupBox):
             url_item = self.realmTable.item(row, 1)
             if url_item and url_item.text().strip():
                 return url_item.text().strip()
-        return self.urlEdit.text().strip()
+        return self.defaultUrlEdit.text().strip()
 
     def toggleContent(self, checked):
         self.contentWidget.setVisible(checked)
@@ -525,7 +529,7 @@ class MessageConfigWidget(QGroupBox):
     def sendMessage(self):
         try:
             h, m, s = map(int, self.editorWidget.commonTimeEdit.text().strip().split(":"))
-            delay = h*3600 + m*60 + s
+            delay = h * 3600 + m * 60 + s
         except:
             delay = 0
         topics = self.getSelectedTopics()
@@ -543,8 +547,8 @@ class MessageConfigWidget(QGroupBox):
         publish_time = datetime.datetime.now() + datetime.timedelta(seconds=delay)
         publish_time_str = publish_time.strftime("%Y-%m-%d %H:%M:%S")
         sent_message = json.dumps(data, indent=2, ensure_ascii=False)
-        if hasattr(self.parent(), "addPublisherLog"):
-            self.parent().addPublisherLog(self.getSelectedRealms(), ", ".join(topics), publish_time_str, sent_message)
+        if hasattr(self.publisherTab, "addPublisherLog"):
+            self.publisherTab.addPublisherLog(self.getSelectedRealms(), ", ".join(topics), publish_time_str, sent_message)
 
     def deleteSelf(self):
         self.publisherTab.removeMessage(self)
@@ -560,4 +564,3 @@ class MessageConfigWidget(QGroupBox):
             "template": self.templateEdit.text().strip(),
             "content": json.loads(self.editorWidget.jsonPreview.toPlainText())
         }
-

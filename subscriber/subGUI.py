@@ -1,7 +1,7 @@
 import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox,
-    QListWidget, QAbstractItemView, QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog
+    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton,
+    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog
 )
 from PyQt5.QtCore import Qt, pyqtSlot, QMetaObject, Q_ARG
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -40,7 +40,7 @@ def start_subscriber(url, realm, topics, on_message_callback):
         runner.run(lambda config: MultiTopicSubscriber(config, topics, on_message_callback))
     threading.Thread(target=run, daemon=True).start()
 
-# Clase para visualizar los mensajes subscritos con la posibilidad de ver el detalle
+# Clase para visualizar los mensajes recibidos
 class MessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -55,9 +55,9 @@ class MessageViewer(QWidget):
         self.messageTable.setColumnCount(3)
         self.messageTable.setHorizontalHeaderLabels(["Hora", "Topic", "Realm"])
         self.messageTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.messageTable.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.messageTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        # Al hacer doble clic se abre el detalle
+        self.messageTable.setSelectionBehavior(QTableWidget.SelectRows)
+        self.messageTable.setEditTriggers(QTableWidget.NoEditTriggers)
+        # Al hacer doble clic se muestra el detalle del mensaje
         self.messageTable.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.messageTable)
         self.setLayout(layout)
@@ -76,61 +76,70 @@ class MessageViewer(QWidget):
             dlg = JsonDetailDialog(self.messages[row], self)
             dlg.exec_()
 
-# Clase SubscriberTab (estructura original con ComboBox para realm y QListWidget para topics)
+# Clase SubscriberTab que contiene dos tablas:
+#  - Una tabla para los realms (con columnas "Realm" y "Router URL")
+#  - Otra tabla para los topics (actualizada según el realm seleccionado)
+# Además se incluyen botones para agregar/borrar realms y topics, y se mantiene la funcionalidad de suscripción.
 class SubscriberTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Global: realm -> [topics]
+        self.realms_topics = {}  # Se cargará desde config/realm_topic_config.json
         self.initUI()
         self.loadGlobalRealmTopicConfig()
 
     def initUI(self):
         mainLayout = QHBoxLayout(self)
+
+        # Panel de configuración (a la izquierda)
         configWidget = QWidget()
         configLayout = QVBoxLayout(configWidget)
 
-        # Configuración de realm
-        connLayout = QHBoxLayout()
-        connLayout.addWidget(QLabel("Realm:"))
-        self.realmCombo = QComboBox()
-        self.realmCombo.addItems(["default"])  # Inicialmente "default"; se actualizará con la configuración global
-        self.realmCombo.setMinimumWidth(200)
-        connLayout.addWidget(self.realmCombo)
+        # Tabla de Realms
+        realmsLayout = QVBoxLayout()
+        realmsLabel = QLabel("Realms:")
+        realmsLayout.addWidget(realmsLabel)
+        self.realmTable = QTableWidget(0, 2)
+        self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
+        self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        realmsLayout.addWidget(self.realmTable)
+        btnRealmsLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo realm")
-        connLayout.addWidget(self.newRealmEdit)
-        self.addRealmButton = QPushButton("Agregar realm")
-        self.addRealmButton.clicked.connect(self.addRealm)
-        connLayout.addWidget(self.addRealmButton)
-        configLayout.addLayout(connLayout)
+        btnRealmsLayout.addWidget(self.newRealmEdit)
+        self.addRealmBtn = QPushButton("Agregar")
+        self.addRealmBtn.clicked.connect(self.addRealmRow)
+        btnRealmsLayout.addWidget(self.addRealmBtn)
+        self.delRealmBtn = QPushButton("Borrar")
+        self.delRealmBtn.clicked.connect(self.deleteRealmRow)
+        btnRealmsLayout.addWidget(self.delRealmBtn)
+        realmsLayout.addLayout(btnRealmsLayout)
+        configLayout.addLayout(realmsLayout)
 
-        # Configuración de topics
-        topicsLayout = QHBoxLayout()
-        topicsLayout.addWidget(QLabel("Topics:"))
-        self.topicsList = QListWidget()
-        self.topicsList.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.topicsList.addItem("default")
-        topicsLayout.addWidget(self.topicsList)
-        btnLayout = QVBoxLayout()
+        # Tabla de Topics
+        topicsLayout = QVBoxLayout()
+        topicsLabel = QLabel("Topics:")
+        topicsLayout.addWidget(topicsLabel)
+        self.topicTable = QTableWidget(0, 1)
+        self.topicTable.setHorizontalHeaderLabels(["Topic"])
+        self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        topicsLayout.addWidget(self.topicTable)
+        btnTopicsLayout = QHBoxLayout()
         self.newTopicEdit = QLineEdit()
         self.newTopicEdit.setPlaceholderText("Nuevo tópico")
-        btnLayout.addWidget(self.newTopicEdit)
-        self.addTopicButton = QPushButton("Agregar")
-        self.addTopicButton.clicked.connect(self.addTopic)
-        btnLayout.addWidget(self.addTopicButton)
-        self.delTopicButton = QPushButton("Borrar")
-        self.delTopicButton.clicked.connect(self.deleteTopic)
-        btnLayout.addWidget(self.delTopicButton)
-        topicsLayout.addLayout(btnLayout)
+        btnTopicsLayout.addWidget(self.newTopicEdit)
+        self.addTopicBtn = QPushButton("Agregar")
+        self.addTopicBtn.clicked.connect(self.addTopicRow)
+        btnTopicsLayout.addWidget(self.addTopicBtn)
+        self.delTopicBtn = QPushButton("Borrar")
+        self.delTopicBtn.clicked.connect(self.deleteTopicRow)
+        btnTopicsLayout.addWidget(self.delTopicBtn)
+        topicsLayout.addLayout(btnTopicsLayout)
         configLayout.addLayout(topicsLayout)
 
-        # Router URL (se deja en la misma línea junto al realm si se necesita, pero aquí se muestra)
-        routerLayout = QHBoxLayout()
-        routerLayout.addWidget(QLabel("Router URL:"))
-        self.urlEdit = QLineEdit("ws://127.0.0.1:60001/ws")
-        routerLayout.addWidget(self.urlEdit)
-        configLayout.addLayout(routerLayout)
+        # Cuando se haga clic en un realm, se actualizan los topics de ese realm
+        self.realmTable.cellClicked.connect(self.updateTopicsFromSelectedRealm)
 
+        # (Se omite un widget extra de Router URL ya que se muestra en la tabla de realms)
         # Botones de suscripción
         btnSubLayout = QHBoxLayout()
         self.startButton = QPushButton("Iniciar Suscripción")
@@ -150,53 +159,88 @@ class SubscriberTab(QWidget):
         configLayout.addStretch()
 
         mainLayout.addWidget(configWidget, 1)
+
+        # Panel de visualización de mensajes
         self.viewer = MessageViewer(self)
         mainLayout.addWidget(self.viewer, 2)
         self.setLayout(mainLayout)
 
     def loadGlobalRealmTopicConfig(self):
-        # Carga la configuración global de realms y topics desde config/realm_topic_config.json
+        # Carga el archivo global de configuración de realms y topics
         config_path = os.path.join(os.path.dirname(__file__), "..", "config", "realm_topic_config.json")
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self.realms_topics = data.get("realms", {})
-                # Se puede actualizar el realmCombo con las keys de realms si se desea
-                self.realmCombo.clear()
-                self.realmCombo.addItems(list(self.realms_topics.keys()))
-                self.updateTopicsFromRealms()
+                # Actualizamos la tabla de realms
+                self.realmTable.setRowCount(0)
+                for realm, topics in sorted(self.realms_topics.items()):
+                    row = self.realmTable.rowCount()
+                    self.realmTable.insertRow(row)
+                    self.realmTable.setItem(row, 0, QTableWidgetItem(realm))
+                    # Si existe Router URL en la configuración global para este realm, se puede mostrar
+                    router = data.get("realm_configs", {}).get(realm, "")
+                    self.realmTable.setItem(row, 1, QTableWidgetItem(router))
+                # Actualizamos los topics según el primer realm seleccionado (o "default")
+                self.updateTopicsFromSelectedRealm(0, 0)
                 print("Configuración global de realms/topics cargada (suscriptor).")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error al cargar la configuración global:\n{e}")
         else:
             QMessageBox.warning(self, "Advertencia", "No se encontró el archivo realm_topic_config.json.")
 
-    def addRealm(self):
+    def addRealmRow(self):
         new_realm = self.newRealmEdit.text().strip()
-        if new_realm and new_realm not in [self.realmCombo.itemText(i) for i in range(self.realmCombo.count())]:
-            self.realmCombo.addItem(new_realm)
+        if new_realm:
+            row = self.realmTable.rowCount()
+            self.realmTable.insertRow(row)
+            self.realmTable.setItem(row, 0, QTableWidgetItem(new_realm))
+            self.realmTable.setItem(row, 1, QTableWidgetItem(""))
             self.newRealmEdit.clear()
 
-    def addTopic(self):
+    def deleteRealmRow(self):
+        rows_to_delete = []
+        for row in range(self.realmTable.rowCount()):
+            item = self.realmTable.item(row, 0)
+            if not item or item.text().strip() == "":
+                rows_to_delete.append(row)
+        for row in sorted(rows_to_delete, reverse=True):
+            self.realmTable.removeRow(row)
+
+    def addTopicRow(self):
         new_topic = self.newTopicEdit.text().strip()
         if new_topic:
-            self.topicsList.addItem(new_topic)
+            row = self.topicTable.rowCount()
+            self.topicTable.insertRow(row)
+            self.topicTable.setItem(row, 0, QTableWidgetItem(new_topic))
             self.newTopicEdit.clear()
 
-    def deleteTopic(self):
-        for item in self.topicsList.selectedItems():
-            self.topicsList.takeItem(self.topicsList.row(item))
+    def deleteTopicRow(self):
+        rows_to_delete = []
+        for row in range(self.topicTable.rowCount()):
+            item = self.topicTable.item(row, 0)
+            if not item or item.text().strip() == "":
+                rows_to_delete.append(row)
+        for row in sorted(rows_to_delete, reverse=True):
+            self.topicTable.removeRow(row)
 
-    def updateTopicsFromRealms(self):
-        # Actualiza la lista de topics en función del realm seleccionado y de la configuración global
-        current_realm = self.realmCombo.currentText()
-        self.topicsList.clear()
-        if current_realm in self.realms_topics:
-            for t in self.realms_topics[current_realm]:
-                self.topicsList.addItem(t)
+    def updateTopicsFromSelectedRealm(self, row, column):
+        # Cuando se hace clic en un realm, actualiza la tabla de topics con los topics de ese realm
+        if self.realmTable.rowCount() == 0:
+            return
+        item = self.realmTable.item(row, 0)
+        realm = item.text() if item else "default"
+        self.topicTable.setRowCount(0)
+        if realm in self.realms_topics:
+            for t in self.realms_topics[realm]:
+                r = self.topicTable.rowCount()
+                self.topicTable.insertRow(r)
+                self.topicTable.setItem(r, 0, QTableWidgetItem(t))
         else:
-            self.topicsList.addItem("default")
+            r = self.topicTable.rowCount()
+            self.topicTable.insertRow(r)
+            self.topicTable.setItem(r, 0, QTableWidgetItem("default"))
 
     def loadProjectConfig(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Configuración de Proyecto", "", "JSON Files (*.json);;All Files (*)")

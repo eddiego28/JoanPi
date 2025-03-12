@@ -3,53 +3,33 @@
     "scenarios": [
       {
         "id": 1,
-        "realm": "default",
+        "realms": ["default", "someRealm"],
         "router_url": "ws://127.0.0.1:60001",
-        "topic": "com.ads.midshmi.topic",
+        "topics": ["default", "my.topic"],
         "time": "00:00:02",
         "content": {
-          "EP": {
-            "common": {
-              "palabra1": {
-                "campo1": "valor1",
-                "campo2": "valor2",
-                "detalles": {
-                  "subcampo1": "dato1",
-                  "subcampo2": 123,
-                  "subcampo3": [
-                    "item1",
-                    "item2",
-                    "item3"
-                  ]
-                }
-              },
-              "palabra3": {
-                "campo5": "valor5",
-                "campo6": "valor6",
-                "propiedades": {
-                  "peso": 75.3,
-                  "altura": 1.82,
-                  "colores": [
-                    "rojo",
-                    "verde",
-                    "azul"
-                  ]
-                }
-              }
-            }
-          }
+          "key": "value"
+        }
+      },
+      {
+        "id": 2,
+        "realms": ["ADS.MIDSHMI"],
+        "router_url": "ws://127.0.0.1:60001",
+        "topics": ["another.topic"],
+        "time": "00:00:05",
+        "content": {
+          "message": "hello"
         }
       }
-    ]
+    ],
+    "realm_configs": {
+      "default": "ws://127.0.0.1:60001",
+      "ADS.MIDSHMI": "ws://127.0.0.1:60002",
+      "someRealm": "ws://127.0.0.1:60003"
+    }
   },
   "subscriber": {
-    "realms": [
-      "ADS.MIDSHMI",
-      "default"
-    ],
-    "topics": [
-      "some.topic",
-      "another.topic"
-    ]
+    "realms": ["default", "ADS.MIDSHMI"],
+    "topics": ["default", "my.topic", "another.topic"]
   }
 }

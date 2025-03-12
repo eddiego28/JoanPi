@@ -2,7 +2,7 @@ import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
-    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QDialog, QDialogButtonBox
+    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QListWidget, QListWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -40,7 +40,6 @@ def send_message_now(router_url, realm, topic, message, delay=0):
     async def _send():
         if delay > 0:
             await asyncio.sleep(delay)
-        # Se publica para el realm actual
         global_session.publish(topic, **message)
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message_json = json.dumps(message, indent=2, ensure_ascii=False)
@@ -89,14 +88,14 @@ class PublisherTab(QWidget):
         super().__init__(parent)
         self.msgWidgets = []
         self.next_id = 1
-        self.realms_topics = {}   # Mapeo: realm -> [topics]
-        self.realm_configs = {}   # Mapeo: realm -> router URL
+        self.realms_topics = {}    # Mapeo: realm -> [topics]
+        self.realm_configs = {}    # Mapeo: realm -> router URL
         self.initUI()
         self.autoLoadRealmsTopics()  # Carga automática del fichero de configuración
 
     def initUI(self):
         layout = QVBoxLayout()
-        # Layout superior con botones globales
+        # Botones superiores
         topLayout = QHBoxLayout()
         self.addMsgButton = QPushButton("Agregar mensaje")
         self.addMsgButton.clicked.connect(self.addMessage)
@@ -112,10 +111,7 @@ class PublisherTab(QWidget):
         topLayout.addWidget(self.loadRealmsButton)
         layout.addLayout(topLayout)
 
-        # Sección para gestionar las configuraciones de realm (sin widget complejo, se asume que se cargan desde el fichero)
-        # En este ejemplo, las configuraciones de router URL se registran automáticamente desde el fichero
-        # Si el usuario las modifica manualmente en cada mensaje, se utilizará ese valor
-
+        # Área de mensajes
         splitter = QSplitter(Qt.Vertical)
         self.msgArea = QScrollArea()
         self.msgArea.setWidgetResizable(True)
@@ -142,12 +138,9 @@ class PublisherTab(QWidget):
 
     def addMessage(self):
         from .pubEditor import PublisherEditorWidget
-        widget = MessageConfigWidget(self.next_id, parent=self)
-        # Actualiza los realms en el widget si ya se han cargado
+        widget = MessageConfigWidget(self.next_id, self)
         if self.realms_topics:
             widget.updateRealmsTopics(self.realms_topics)
-        # Si el realm seleccionado tiene un router configurado, se asigna al URL de mensaje
-        # (En este ejemplo, cada mensaje tiene un campo de URL editable para sobreescribir el global)
         self.msgLayout.addWidget(widget)
         self.msgWidgets.append(widget)
         self.next_id += 1
@@ -165,32 +158,33 @@ class PublisherTab(QWidget):
         for widget in self.msgWidgets:
             config = widget.getConfig()
             realms = config.get("realms", [])
-            topic = config.get("topic", "default")
-            delay = 0
+            topics = config.get("topics", [])
             try:
                 h, m, s = map(int, config.get("time", "00:00:00").split(":"))
                 delay = h * 3600 + m * 60 + s
             except:
                 delay = 0
-            # Enviar a cada realm seleccionado
             for realm in realms:
+                # Obtener el router URL: del widget o de la configuración global
                 router_url = self.realm_configs.get(realm, widget.urlEdit.text().strip())
-                start_publisher(router_url, realm, topic)
-                send_message_now(router_url, realm, topic, config.get("content", {}), delay)
+                for topic in topics:
+                    start_publisher(router_url, realm, topic)
+                    send_message_now(router_url, realm, topic, config.get("content", {}), delay)
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.addPublisherLog(realms, topic, timestamp, f"Publicador iniciado: {config}")
+            self.addPublisherLog(realms, ", ".join(topics), timestamp, f"Publicador iniciado: {config}")
 
     def sendAllAsync(self):
         for widget in self.msgWidgets:
             config = widget.getConfig()
             realms = config.get("realms", [])
-            topic = config.get("topic", "default")
+            topics = config.get("topics", [])
             for realm in realms:
                 router_url = self.realm_configs.get(realm, widget.urlEdit.text().strip())
-                send_message_now(router_url, realm, topic, config.get("content", {}), delay=0)
+                for topic in topics:
+                    send_message_now(router_url, realm, topic, config.get("content", {}), delay=0)
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sent_message = json.dumps(config.get("content", {}), indent=2, ensure_ascii=False)
-            self.addPublisherLog(realms, topic, timestamp, sent_message)
+            self.addPublisherLog(realms, ", ".join(topics), timestamp, sent_message)
 
     def getProjectConfig(self):
         scenarios = [widget.getConfig() for widget in self.msgWidgets]
@@ -210,10 +204,18 @@ class PublisherTab(QWidget):
                 item.widget().deleteLater()
         for scenario in scenarios:
             from .pubEditor import PublisherEditorWidget
-            widget = MessageConfigWidget(self.next_id, parent=self)
-            widget.realmList.setSelectedItems(scenario.get("realms", ["default"]))
+            widget = MessageConfigWidget(self.next_id, self)
+            # Para cada mensaje, se cargan los datos guardados:
+            # Se supone que el campo "realms" es una lista y "topics" es una lista.
+            for realm in scenario.get("realms", ["default"]):
+                item = QListWidgetItem(realm)
+                item.setCheckState(Qt.Checked)
+                widget.realmList.addItem(item)
+            for topic in scenario.get("topics", ["default"]):
+                item = QListWidgetItem(topic)
+                item.setCheckState(Qt.Checked)
+                widget.topicList.addItem(item)
             widget.urlEdit.setText(scenario.get("router_url", "ws://127.0.0.1:60001"))
-            widget.topicCombo.setCurrentText(scenario.get("topic", "default"))
             widget.editorWidget.commonTimeEdit.setText(scenario.get("time", "00:00:00"))
             widget.editorWidget.jsonPreview.setPlainText(json.dumps(scenario.get("content", {}), indent=2, ensure_ascii=False))
             if self.realms_topics:
@@ -223,7 +225,7 @@ class PublisherTab(QWidget):
             self.next_id += 1
 
     def loadProject(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Seleccione Archivo de Proyecto", "", "JSON Files (*.json);;All Files (*)")
+        filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Proyecto", "", "JSON Files (*.json);;All Files (*)")
         if not filepath:
             return
         try:
@@ -248,7 +250,6 @@ class PublisherTab(QWidget):
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.realms_topics = data.get("realms", {})
-            # Si en el fichero se definen router URL para cada realm, actualizar realm_configs:
             self.realm_configs = data.get("realm_configs", self.realm_configs)
             for widget in self.msgWidgets:
                 widget.updateRealmsTopics(self.realms_topics)
@@ -269,13 +270,11 @@ class PublisherTab(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error al cargar Realms/Topics por defecto:\n{e}")
 
-# Modificación en MessageConfigWidget:
-# Se reemplaza el QComboBox de realms por un QListWidget para selección múltiple.
 class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
         self.msg_id = msg_id
-        self.realms_topics = {}  # Mapeo para este widget
+        self.realms_topics = {}  # Configuración local de realms/topics para este mensaje
         self.setTitle(f"Mensaje #{self.msg_id}")
         self.setCheckable(True)
         self.setChecked(True)
@@ -284,109 +283,195 @@ class MessageConfigWidget(QGroupBox):
 
     def initUI(self):
         self.contentWidget = QWidget()
-        contentLayout = QVBoxLayout()
+        contentLayout = QHBoxLayout()  # Layout horizontal: contenido principal a la izquierda y botones a la derecha
+        mainLayout = QVBoxLayout()
+
         formLayout = QFormLayout()
-        # Configuración de realms: Usamos un QListWidget para selección múltiple
+        # Realms: QListWidget con botones agregar y borrar
         self.realmList = QListWidget()
         self.realmList.setSelectionMode(QAbstractItemView.MultiSelection)
-        # Se carga inicialmente con "default"
-        item = QListWidgetItem("default")
-        item.setCheckState(Qt.Checked)
-        self.realmList.addItem(item)
-        formLayout.addRow("Realms:", self.realmList)
+        default_item = QListWidgetItem("default")
+        default_item.setCheckState(Qt.Checked)
+        self.realmList.addItem(default_item)
+        realmLayout = QHBoxLayout()
+        realmLayout.addWidget(self.realmList)
+        self.newRealmEdit = QLineEdit()
+        self.newRealmEdit.setPlaceholderText("Nuevo realm")
+        realmLayout.addWidget(self.newRealmEdit)
+        self.addRealmButton = QPushButton("Agregar")
+        self.addRealmButton.clicked.connect(self.addRealm)
+        realmLayout.addWidget(self.addRealmButton)
+        self.deleteRealmButton = QPushButton("Borrar")
+        self.deleteRealmButton.clicked.connect(self.deleteRealm)
+        realmLayout.addWidget(self.deleteRealmButton)
+        formLayout.addRow("Realms:", realmLayout)
+
+        # Topics: QListWidget con botones agregar y borrar
+        self.topicList = QListWidget()
+        self.topicList.setSelectionMode(QAbstractItemView.MultiSelection)
+        default_topic = QListWidgetItem("default")
+        default_topic.setCheckState(Qt.Checked)
+        self.topicList.addItem(default_topic)
+        topicLayout = QHBoxLayout()
+        topicLayout.addWidget(self.topicList)
+        self.newTopicEdit = QLineEdit()
+        self.newTopicEdit.setPlaceholderText("Nuevo topic")
+        topicLayout.addWidget(self.newTopicEdit)
+        self.addTopicButton = QPushButton("Agregar")
+        self.addTopicButton.clicked.connect(self.addTopic)
+        topicLayout.addWidget(self.addTopicButton)
+        self.deleteTopicButton = QPushButton("Borrar")
+        self.deleteTopicButton.clicked.connect(self.deleteTopic)
+        topicLayout.addWidget(self.deleteTopicButton)
+        formLayout.addRow("Topics:", topicLayout)
+
         self.urlEdit = QLineEdit("ws://127.0.0.1:60001")
         formLayout.addRow("Router URL:", self.urlEdit)
-        # Configuración del topic (único)
-        self.topicCombo = QComboBox()
-        self.topicCombo.setEditable(True)
-        self.topicCombo.addItem("default")
-        formLayout.addRow("Topic:", self.topicCombo)
 
-        contentLayout.addLayout(formLayout)
+        mainLayout.addLayout(formLayout)
+
         from .pubEditor import PublisherEditorWidget
         self.editorWidget = PublisherEditorWidget(parent=self)
-        contentLayout.addWidget(self.editorWidget)
-        # Botones para enviar y eliminar mensaje
-        btnLayout = QHBoxLayout()
+        mainLayout.addWidget(self.editorWidget)
+
+        contentLayout.addLayout(mainLayout)
+
+        # Botones laterales: Enviar y Eliminar mensaje
+        sideLayout = QVBoxLayout()
         self.sendButton = QPushButton("Enviar")
         self.sendButton.clicked.connect(self.sendMessage)
-        btnLayout.addWidget(self.sendButton)
+        sideLayout.addWidget(self.sendButton)
         self.deleteButton = QPushButton("Eliminar")
         self.deleteButton.clicked.connect(self.deleteSelf)
-        btnLayout.addWidget(self.deleteButton)
-        contentLayout.addLayout(btnLayout)
+        sideLayout.addWidget(self.deleteButton)
+        contentLayout.addLayout(sideLayout)
 
         self.contentWidget.setLayout(contentLayout)
-        mainLayout = QVBoxLayout()
-        mainLayout.addWidget(self.contentWidget)
-        self.setLayout(mainLayout)
+        outerLayout = QVBoxLayout()
+        outerLayout.addWidget(self.contentWidget)
+        self.setLayout(outerLayout)
 
-    def deleteSelf(self):
-        # Llama al método removeMessage del PublisherTab (accediendo dos niveles arriba)
-        self.parent().parent().removeMessage(self)
+    def addRealm(self):
+        new_realm = self.newRealmEdit.text().strip()
+        if new_realm:
+            item = QListWidgetItem(new_realm)
+            item.setCheckState(Qt.Checked)
+            self.realmList.addItem(item)
+            self.newRealmEdit.clear()
+
+    def deleteRealm(self):
+        indices = []
+        for i in range(self.realmList.count()):
+            item = self.realmList.item(i)
+            if item.checkState() != Qt.Checked:
+                indices.append(i)
+        for index in sorted(indices, reverse=True):
+            self.realmList.takeItem(index)
+
+    def addTopic(self):
+        new_topic = self.newTopicEdit.text().strip()
+        if new_topic:
+            item = QListWidgetItem(new_topic)
+            item.setCheckState(Qt.Checked)
+            self.topicList.addItem(item)
+            self.newTopicEdit.clear()
+
+    def deleteTopic(self):
+        indices = []
+        for i in range(self.topicList.count()):
+            item = self.topicList.item(i)
+            if item.checkState() != Qt.Checked:
+                indices.append(i)
+        for index in sorted(indices, reverse=True):
+            self.topicList.takeItem(index)
 
     def updateRealmsTopics(self, realms_topics):
         self.realms_topics = realms_topics
         self.realmList.clear()
-        # Se agregan todos los realms disponibles y se dejan seleccionados por defecto
         for realm in sorted(realms_topics.keys()):
             item = QListWidgetItem(realm)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked)
             self.realmList.addItem(item)
+        self.updateTopicsFromSelectedRealm()
+
+    def updateTopicsFromSelectedRealm(self):
+        # Se actualizan los topics según el primer realm seleccionado (puedes ampliar la lógica)
+        if self.realmList.count() > 0:
+            selected_realms = self.getSelectedRealms()
+            # Por simplicidad, si hay al menos un realm y está en la configuración, se usa sus topics
+            if selected_realms:
+                first = selected_realms[0]
+                self.topicList.clear()
+                if first in self.realms_topics:
+                    for t in self.realms_topics[first]:
+                        item = QListWidgetItem(t)
+                        item.setCheckState(Qt.Checked)
+                        self.topicList.addItem(item)
+                else:
+                    item = QListWidgetItem("default")
+                    item.setCheckState(Qt.Checked)
+                    self.topicList.addItem(item)
+
+    def getSelectedRealms(self):
+        realms = []
+        for i in range(self.realmList.count()):
+            item = self.realmList.item(i)
+            if item.checkState() == Qt.Checked:
+                realms.append(item.text())
+        return realms if realms else ["default"]
+
+    def getSelectedTopics(self):
+        topics = []
+        for i in range(self.topicList.count()):
+            item = self.topicList.item(i)
+            if item.checkState() == Qt.Checked:
+                topics.append(item.text())
+        return topics if topics else ["default"]
 
     def toggleContent(self, checked):
         self.contentWidget.setVisible(checked)
         if not checked:
-            topics = self.topicCombo.currentText().strip()
-            # Se obtiene la lista de realms seleccionados
             realms = self.getSelectedRealms()
+            topics = self.getSelectedTopics()
             time_val = self.editorWidget.commonTimeEdit.text()
-            self.setTitle(f"Mensaje #{self.msg_id} - {topics} - {time_val} - {', '.join(realms)}")
+            self.setTitle(f"Mensaje #{self.msg_id} - {', '.join(topics)} - {time_val} - {', '.join(realms)}")
         else:
             self.setTitle(f"Mensaje #{self.msg_id}")
-
-    def getSelectedRealms(self):
-        realms = []
-        for index in range(self.realmList.count()):
-            item = self.realmList.item(index)
-            if item.checkState() == Qt.Checked:
-                realms.append(item.text())
-        if not realms:
-            realms = ["default"]
-        return realms
 
     def sendMessage(self):
         try:
             h, m, s = map(int, self.editorWidget.commonTimeEdit.text().strip().split(":"))
-            delay = h * 3600 + m * 60 + s
+            delay = h*3600 + m*60 + s
         except:
             delay = 0
-        topic = self.topicCombo.currentText().strip()
+        topics = self.getSelectedTopics()
+        realms = self.getSelectedRealms()
         try:
             data = json.loads(self.editorWidget.jsonPreview.toPlainText())
         except Exception as e:
             QMessageBox.critical(self, "Error", f"JSON inválido:\n{e}")
             return
-        realms = self.getSelectedRealms()
-        # Enviar el mensaje a cada realm seleccionado
         for realm in realms:
-            # Obtener el router URL del mensaje (si está definido en el widget, sino se usa el campo URL)
             router_url = self.urlEdit.text().strip()
-            from .pubGUI import send_message_now
-            send_message_now(router_url, realm, topic, data, delay=delay)
+            for topic in topics:
+                from .pubGUI import send_message_now
+                send_message_now(router_url, realm, topic, data, delay)
         publish_time = datetime.datetime.now() + datetime.timedelta(seconds=delay)
         publish_time_str = publish_time.strftime("%Y-%m-%d %H:%M:%S")
         sent_message = json.dumps(data, indent=2, ensure_ascii=False)
         if hasattr(self.parent(), "addPublisherLog"):
-            self.parent().addPublisherLog(self.getSelectedRealms(), topic, publish_time_str, sent_message)
+            self.parent().addPublisherLog(self.getSelectedRealms(), ", ".join(topics), publish_time_str, sent_message)
+
+    def deleteSelf(self):
+        # Llama al método removeMessage del PublisherTab (accediendo dos niveles arriba)
+        self.parent().parent().removeMessage(self)
 
     def getConfig(self):
         return {
             "id": self.msg_id,
             "realms": self.getSelectedRealms(),
             "router_url": self.urlEdit.text().strip(),
-            "topic": self.topicCombo.currentText().strip(),
+            "topics": self.getSelectedTopics(),
             "time": self.editorWidget.commonTimeEdit.text().strip(),
             "content": json.loads(self.editorWidget.jsonPreview.toPlainText())
         }

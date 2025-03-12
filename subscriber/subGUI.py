@@ -49,8 +49,6 @@ class MessageViewer(QWidget):
         layout = QVBoxLayout(self)
         self.viewerLabel = QLabel("Mensajes recibidos:")
         layout.addWidget(self.viewerLabel)
-        # Aquí se podría usar un QListWidget o QTableWidget para mostrar los mensajes
-        # Para este ejemplo usaremos un QListWidget
         self.messageList = QListWidget()
         layout.addWidget(self.messageList)
         self.setLayout(layout)
@@ -58,15 +56,11 @@ class MessageViewer(QWidget):
         text = f"{timestamp} | {topic} | {realm}"
         self.messageList.addItem(text)
         self.messages.append(details)
-    def showDetails(self, index):
-        if 0 <= index < len(self.messages):
-            dlg = JsonDetailDialog(self.messages[index], self)
-            dlg.exec_()
 
 class SubscriberTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Mapeo: realm -> [topics]
+        self.realms_topics = {}  # Global: realm -> [topics]
         self.initUI()
         self.autoLoadRealmsTopics()  # Carga automática desde config
 
@@ -81,7 +75,6 @@ class SubscriberTab(QWidget):
         realmLayout.addWidget(realmLabel)
         self.realmList = QListWidget()
         self.realmList.setSelectionMode(QListWidget.MultiSelection)
-        # Inicialmente se agrega "default"
         default_item = QListWidgetItem("default")
         default_item.setCheckState(Qt.Checked)
         self.realmList.addItem(default_item)
@@ -119,14 +112,14 @@ class SubscriberTab(QWidget):
         topicLayout.addWidget(self.deleteTopicButton)
         configLayout.addLayout(topicLayout)
 
-        # Router URL (común)
+        # Router URL al lado de Realms
         routerLayout = QHBoxLayout()
         routerLayout.addWidget(QLabel("Router URL:"))
         self.urlEdit = QLineEdit("ws://127.0.0.1:60001")
         routerLayout.addWidget(self.urlEdit)
         configLayout.addLayout(routerLayout)
 
-        # Botones de suscripción y configuración
+        # Botones de suscripción
         btnLayout = QHBoxLayout()
         self.startButton = QPushButton("Iniciar Suscripción")
         self.startButton.clicked.connect(self.startSubscription)
@@ -138,7 +131,7 @@ class SubscriberTab(QWidget):
         self.resetLogButton.clicked.connect(self.resetLog)
         btnLayout.addWidget(self.resetLogButton)
         configLayout.addLayout(btnLayout)
-        # Botón para cargar configuración global de Realm/Topic
+        # Botón para cargar configuración global
         self.loadConfigButton = QPushButton("Cargar Realm/Topic")
         self.loadConfigButton.clicked.connect(self.loadProjectConfig)
         configLayout.addWidget(self.loadConfigButton)
@@ -201,7 +194,6 @@ class SubscriberTab(QWidget):
 
     def updateTopicsFromRealms(self):
         if self.realmList.count() > 0:
-            # Usar el primer realm seleccionado
             for i in range(self.realmList.count()):
                 item = self.realmList.item(i)
                 if item.checkState() == Qt.Checked:
@@ -309,11 +301,6 @@ class SubscriberTab(QWidget):
         self.viewer.messageList.clear()
         self.viewer.messages = []
 
-    def getProjectConfig(self):
-        pub_config = self.parent().publisherTab.getProjectConfig()
-        sub_config = self.getProjectConfigLocal()
-        return {"publisher": pub_config, "subscriber": sub_config}
-
     def getProjectConfigLocal(self):
         realms = []
         for i in range(self.realmList.count()):
@@ -340,4 +327,3 @@ class SubscriberTab(QWidget):
                 item = QListWidgetItem(t)
                 item.setCheckState(Qt.Checked)
                 self.topicsList.addItem(item)
-

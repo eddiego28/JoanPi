@@ -9,6 +9,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Sistema WAMP: Publicador y Suscriptor")
         self.resize(900, 700)
         self.initUI()
+        self.showStartupDialog()
 
     def initUI(self):
         centralWidget = QWidget()
@@ -20,7 +21,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.subscriberTab, "Suscriptor")
         mainLayout.addWidget(self.tabs)
 
-        # Botones para cargar y guardar proyecto
+        # Barra de herramientas global para cargar/guardar proyecto
         projLayout = QHBoxLayout()
         self.loadProjButton = QPushButton("Cargar Proyecto")
         self.loadProjButton.clicked.connect(self.loadProject)
@@ -31,6 +32,12 @@ class MainWindow(QMainWindow):
         mainLayout.addLayout(projLayout)
 
         self.setCentralWidget(centralWidget)
+
+    def showStartupDialog(self):
+        reply = QMessageBox.question(self, "Cargar Proyecto", "¿Deseas cargar un proyecto existente?",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.loadProject()
 
     def getProjectConfig(self):
         pub_config = self.publisherTab.getProjectConfig()

@@ -12,6 +12,7 @@ from .pubEditor import PublisherEditorWidget
 global_session = None
 global_loop = None
 
+# Componente WAMP para el publicador
 class JSONPublisher(ApplicationSession):
     def __init__(self, config, topic):
         super().__init__(config)
@@ -48,6 +49,7 @@ def send_message_now(router_url, realm, topic, message, delay=0):
         print("Mensaje enviado en", topic, "para realm", realm, ":", message)
     asyncio.run_coroutine_threadsafe(_send(), global_loop)
 
+# Widget para visualizar mensajes enviados
 class PublisherMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -83,43 +85,45 @@ class PublisherMessageViewer(QWidget):
             dlg = JsonDetailDialog(self.pubMessages[row], self)
             dlg.exec_()
 
+# Tab Publicador
 class PublisherTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.msgWidgets = []
         self.next_id = 1
-        self.realms_topics = {}   # Mapeo: realm -> [topics]
-        self.realm_configs = {}   # Mapeo: realm -> router URL
+        self.realms_topics = {}   # Global: realm -> [topics]
+        self.realm_configs = {}   # Global: realm -> router URL
         self.initUI()
-        self.autoLoadRealmsTopics()  # Carga automática desde config
+        self.autoLoadRealmsTopics()  # Carga automática del fichero de configuración
 
     def initUI(self):
         layout = QVBoxLayout()
-        # Barra de herramientas (global) para el Publicador
+        # Barra de herramientas organizada en grupos
         toolbar = QHBoxLayout()
         # Grupo Mensajes
-        mensajeLayout = QHBoxLayout()
+        msgGroup = QHBoxLayout()
         self.addMsgButton = QPushButton("Agregar mensaje")
-        mensajeLayout.addWidget(self.addMsgButton)
+        self.addMsgButton.clicked.connect(self.addMessage)
+        msgGroup.addWidget(self.addMsgButton)
         self.delMsgButton = QPushButton("Eliminar mensaje seleccionado")
         self.delMsgButton.clicked.connect(self.deleteSelectedMessage)
-        mensajeLayout.addWidget(self.delMsgButton)
-        toolbar.addLayout(mensajeLayout)
+        msgGroup.addWidget(self.delMsgButton)
+        toolbar.addLayout(msgGroup)
         # Grupo Carga
-        cargaLayout = QHBoxLayout()
+        loadGroup = QHBoxLayout()
         self.loadProjButton = QPushButton("Cargar Proyecto")
-        cargaLayout.addWidget(self.loadProjButton)
         self.loadProjButton.clicked.connect(self.loadProject)
+        loadGroup.addWidget(self.loadProjButton)
         self.loadRealmsButton = QPushButton("Cargar Realm/Topic")
-        cargaLayout.addWidget(self.loadRealmsButton)
         self.loadRealmsButton.clicked.connect(self.loadRealmsTopics)
-        toolbar.addLayout(cargaLayout)
+        loadGroup.addWidget(self.loadRealmsButton)
+        toolbar.addLayout(loadGroup)
         # Grupo Envío
-        envioLayout = QHBoxLayout()
+        sendGroup = QHBoxLayout()
         self.sendAllButton = QPushButton("Enviar Mensaje Instantáneo")
-        envioLayout.addWidget(self.sendAllButton)
         self.sendAllButton.clicked.connect(self.sendAllAsync)
-        toolbar.addLayout(envioLayout)
+        sendGroup.addWidget(self.sendAllButton)
+        toolbar.addLayout(sendGroup)
         layout.addLayout(toolbar)
 
         # Área de mensajes
@@ -136,7 +140,7 @@ class PublisherTab(QWidget):
         splitter.setSizes([500, 200])
         layout.addWidget(splitter)
 
-        # Botón global para iniciar publicador (si aplica)
+        # Botón global para iniciar publicador
         connLayout = QHBoxLayout()
         connLayout.addWidget(QLabel("Publicador Global"))
         self.globalStartButton = QPushButton("Iniciar Publicador")
@@ -149,7 +153,7 @@ class PublisherTab(QWidget):
         self.setLayout(layout)
 
     def deleteSelectedMessage(self):
-        # Para este ejemplo, se borra el último mensaje agregado
+        # Elimina el mensaje seleccionado; en este ejemplo, se elimina el último agregado.
         if self.msgWidgets:
             self.removeMessage(self.msgWidgets[-1])
 
@@ -178,7 +182,7 @@ class PublisherTab(QWidget):
             topics = config.get("topics", [])
             try:
                 h, m, s = map(int, config.get("time", "00:00:00").split(":"))
-                delay = h*3600 + m*60 + s
+                delay = h * 3600 + m * 60 + s
             except:
                 delay = 0
             for realm in realms:
@@ -221,7 +225,6 @@ class PublisherTab(QWidget):
         for scenario in scenarios:
             from .pubEditor import PublisherEditorWidget
             widget = MessageConfigWidget(self.next_id, self)
-            # Se asume que en el proyecto se guardan "realms" y "topics" como listas
             for realm in scenario.get("realms", ["default"]):
                 item = QListWidgetItem(realm)
                 item.setCheckState(Qt.Checked)
@@ -285,11 +288,12 @@ class PublisherTab(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error al cargar Realms/Topics por defecto:\n{e}")
 
+# Cada mensaje (escenario) en el Publicador
 class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
         self.msg_id = msg_id
-        self.realms_topics = {}  # Configuración local
+        self.realms_topics = {}  # Configuración local para este mensaje
         self.setTitle(f"Mensaje #{self.msg_id}")
         self.setCheckable(True)
         self.setChecked(True)
@@ -298,13 +302,12 @@ class MessageConfigWidget(QGroupBox):
 
     def initUI(self):
         self.contentWidget = QWidget()
-        # Usamos un layout horizontal para separar el formulario del grupo de botones laterales
+        # Layout horizontal: formulario a la izquierda y botones laterales a la derecha
         contentLayout = QHBoxLayout()
         formLayout = QFormLayout()
-
-        # Realms: QListWidget con botones Agregar y Borrar
+        # Realms
         self.realmList = QListWidget()
-        self.realmList.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.realmList.setSelectionMode(QListWidget.MultiSelection)
         default_item = QListWidgetItem("default")
         default_item.setCheckState(Qt.Checked)
         self.realmList.addItem(default_item)
@@ -320,10 +323,9 @@ class MessageConfigWidget(QGroupBox):
         self.deleteRealmButton.clicked.connect(self.deleteRealm)
         realmLayout.addWidget(self.deleteRealmButton)
         formLayout.addRow("Realms:", realmLayout)
-
-        # Topics: QListWidget con botones Agregar y Borrar
+        # Topics
         self.topicList = QListWidget()
-        self.topicList.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.topicList.setSelectionMode(QListWidget.MultiSelection)
         default_topic = QListWidgetItem("default")
         default_topic.setCheckState(Qt.Checked)
         self.topicList.addItem(default_topic)
@@ -339,23 +341,20 @@ class MessageConfigWidget(QGroupBox):
         self.deleteTopicButton.clicked.connect(self.deleteTopic)
         topicLayout.addWidget(self.deleteTopicButton)
         formLayout.addRow("Topics:", topicLayout)
-
+        # Router URL (al lado de los realms)
         self.urlEdit = QLineEdit("ws://127.0.0.1:60001")
         formLayout.addRow("Router URL:", self.urlEdit)
-
         formContainer = QWidget()
         formContainer.setLayout(formLayout)
         contentLayout.addWidget(formContainer)
-
-        from .pubEditor import PublisherEditorWidget
+        # Editor de mensaje
         self.editorWidget = PublisherEditorWidget(parent=self)
         editorContainer = QWidget()
         editorLayout = QVBoxLayout()
         editorLayout.addWidget(self.editorWidget)
         editorContainer.setLayout(editorLayout)
         contentLayout.addWidget(editorContainer)
-
-        # Barra lateral de botones (Enviar y Eliminar mensaje)
+        # Barra lateral de botones
         sideLayout = QVBoxLayout()
         self.sendButton = QPushButton("Enviar")
         self.sendButton.clicked.connect(self.sendMessage)
@@ -364,7 +363,6 @@ class MessageConfigWidget(QGroupBox):
         self.deleteButton.clicked.connect(self.deleteSelf)
         sideLayout.addWidget(self.deleteButton)
         contentLayout.addLayout(sideLayout)
-
         self.contentWidget.setLayout(contentLayout)
         outerLayout = QVBoxLayout()
         outerLayout.addWidget(self.contentWidget)
@@ -411,11 +409,9 @@ class MessageConfigWidget(QGroupBox):
             item = QListWidgetItem(realm)
             item.setCheckState(Qt.Checked)
             self.realmList.addItem(item)
-        # Actualizar topics según el primer realm seleccionado:
         self.updateTopicsFromRealms()
 
     def updateTopicsFromRealms(self):
-        # Si hay al menos un realm y está en la configuración, usamos sus topics
         if self.realmList.count() > 0:
             for i in range(self.realmList.count()):
                 item = self.realmList.item(i)
@@ -424,9 +420,9 @@ class MessageConfigWidget(QGroupBox):
                     self.topicList.clear()
                     if realm in self.realms_topics:
                         for t in self.realms_topics[realm]:
-                            topic_item = QListWidgetItem(t)
-                            topic_item.setCheckState(Qt.Checked)
-                            self.topicList.addItem(topic_item)
+                            t_item = QListWidgetItem(t)
+                            t_item.setCheckState(Qt.Checked)
+                            self.topicList.addItem(t_item)
                     else:
                         default_topic = QListWidgetItem("default")
                         default_topic.setCheckState(Qt.Checked)
@@ -484,7 +480,6 @@ class MessageConfigWidget(QGroupBox):
             self.parent().addPublisherLog(self.getSelectedRealms(), ", ".join(topics), publish_time_str, sent_message)
 
     def deleteSelf(self):
-        # Llama al método removeMessage del PublisherTab (dos niveles arriba)
         self.parent().parent().removeMessage(self)
 
     def getConfig(self):

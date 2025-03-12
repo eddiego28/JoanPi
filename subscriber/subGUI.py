@@ -1,4 +1,3 @@
-# subscriber/subGUI.py
 import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox,
@@ -41,6 +40,7 @@ def start_subscriber(url, realm, topics, on_message_callback):
         runner.run(lambda config: MultiTopicSubscriber(config, topics, on_message_callback))
     threading.Thread(target=run, daemon=True).start()
 
+# Clase para visualizar los mensajes recibidos con posibilidad de ver el detalle (al hacer doble clic)
 class MessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -54,6 +54,7 @@ class MessageViewer(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # Al hacer doble clic se muestra el detalle del mensaje
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
@@ -70,22 +71,22 @@ class MessageViewer(QWidget):
             dlg = JsonDetailDialog(self.messages[row], self)
             dlg.exec_()
 
+# Tab Suscriptor: Se mantiene la estructura original con ComboBox para realm y QListWidget para topics.
 class SubscriberTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.subMessages = []
-        self.realms_topics = {}  # Se cargará desde el archivo global
+        self.realms_topics = {}  # Esta configuración se cargará desde config/realm_topic_config.json
         self.initUI()
     def initUI(self):
         mainLayout = QHBoxLayout(self)
         configWidget = QWidget()
         configLayout = QVBoxLayout(configWidget)
 
-        # Grupo de Realms: Combobox y botones para agregar/borrar realms
+        # Configuración de Realm: ComboBox y botones para agregar/borrar realms
         connLayout = QHBoxLayout()
         connLayout.addWidget(QLabel("Realm:"))
         self.realmCombo = QComboBox()
-        self.realmCombo.addItems(["default"])  # Se actualizará al cargar la configuración global
+        self.realmCombo.addItems(["default"])  # Inicialmente "default"; se actualizará al cargar configuración global
         self.realmCombo.setMinimumWidth(200)
         connLayout.addWidget(self.realmCombo)
         self.newRealmEdit = QLineEdit()
@@ -96,7 +97,7 @@ class SubscriberTab(QWidget):
         connLayout.addWidget(self.addRealmButton)
         configLayout.addLayout(connLayout)
 
-        # Grupo de Topics: Lista con selección múltiple y botones para agregar/borrar topics
+        # Configuración de Topics: QListWidget y botones para agregar/borrar topics
         topicsLayout = QHBoxLayout()
         topicsLayout.addWidget(QLabel("Topics:"))
         self.topicsList = QListWidget()
@@ -104,19 +105,19 @@ class SubscriberTab(QWidget):
         self.topicsList.addItem("default")
         topicsLayout.addWidget(self.topicsList)
         btnLayout = QVBoxLayout()
-        self.loadTopicsButton = QPushButton("Cargar Topics desde archivo")
-        self.loadTopicsButton.clicked.connect(self.loadTopics)
-        btnLayout.addWidget(self.loadTopicsButton)
         self.newTopicEdit = QLineEdit()
-        self.newTopicEdit.setPlaceholderText("Añadir nuevo tópico")
+        self.newTopicEdit.setPlaceholderText("Nuevo tópico")
         btnLayout.addWidget(self.newTopicEdit)
         self.addTopicButton = QPushButton("Agregar")
         self.addTopicButton.clicked.connect(self.addTopic)
         btnLayout.addWidget(self.addTopicButton)
+        self.delTopicButton = QPushButton("Borrar")
+        self.delTopicButton.clicked.connect(self.deleteTopic)
+        btnLayout.addWidget(self.delTopicButton)
         topicsLayout.addLayout(btnLayout)
         configLayout.addLayout(topicsLayout)
 
-        # Se omite el widget adicional de Router URL (ya se muestra junto al realm en el ComboBox si es necesario)
+        # Se elimina el widget extra de Router URL ya que se muestra junto al realm en la configuración global.
         # Botones de suscripción
         btnSubLayout = QHBoxLayout()
         self.startButton = QPushButton("Iniciar Suscripción")
@@ -133,7 +134,6 @@ class SubscriberTab(QWidget):
         self.loadConfigButton.clicked.connect(self.loadProjectConfig)
         configLayout.addWidget(self.loadConfigButton)
         configLayout.addStretch()
-
         mainLayout.addWidget(configWidget, 1)
         self.viewer = MessageViewer(self)
         mainLayout.addWidget(self.viewer, 2)
@@ -145,26 +145,15 @@ class SubscriberTab(QWidget):
             self.realmCombo.addItem(new_realm)
             self.newRealmEdit.clear()
 
-    def loadTopics(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Seleccione JSON de Topics", "", "JSON Files (*.json);;All Files (*)")
-        if not filepath:
-            return
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo cargar el archivo:\n{e}")
-            return
-        topics = data if isinstance(data, list) else data.get("topics", [])
-        self.topicsList.clear()
-        for topic in topics:
-            self.topicsList.addItem(topic)
-
     def addTopic(self):
         new_topic = self.newTopicEdit.text().strip()
         if new_topic:
             self.topicsList.addItem(new_topic)
             self.newTopicEdit.clear()
+
+    def deleteTopic(self):
+        for item in self.topicsList.selectedItems():
+            self.topicsList.takeItem(self.topicsList.row(item))
 
     def loadProjectConfig(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Configuración de Proyecto", "", "JSON Files (*.json);;All Files (*)")
@@ -173,19 +162,18 @@ class SubscriberTab(QWidget):
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 config = json.load(f)
+            subscriber_config = config.get("subscriber", {})
+            realms = subscriber_config.get("realms", [])
+            topics = subscriber_config.get("topics", [])
+            if realms:
+                self.realmCombo.clear()
+                self.realmCombo.addItems(realms)
+            if topics:
+                self.topicsList.clear()
+                for topic in topics:
+                    self.topicsList.addItem(topic)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo cargar la configuración:\n{e}")
-            return
-        subscriber_config = config.get("subscriber", {})
-        realms = subscriber_config.get("realms", [])
-        topics = subscriber_config.get("topics", [])
-        if realms:
-            self.realmCombo.clear()
-            self.realmCombo.addItems(realms)
-        if topics:
-            self.topicsList.clear()
-            for topic in topics:
-                self.topicsList.addItem(topic)
 
     def addSubscriberLog(self, realm, topic, timestamp, details):
         self.viewer.add_message(realm, topic, timestamp, details)
@@ -198,8 +186,8 @@ class SubscriberTab(QWidget):
             QMessageBox.critical(self, "Error", "Seleccione al menos un tópico.")
             return
         topics = [item.text() for item in selected_items]
-        # Se toma el Router URL de la configuración global si fuera necesario (aquí se puede definir un valor fijo)
-        url = ""  # En este ejemplo, se asume que el URL se configura en el archivo global y se usa en PublisherTab.
+        # Se asume que el Router URL está definido en la configuración global (para el suscriptor no se muestra un widget extra)
+        url = ""  # o bien se define un valor predeterminado
         def on_message_callback(topic, content):
             QMetaObject.invokeMethod(
                 self,

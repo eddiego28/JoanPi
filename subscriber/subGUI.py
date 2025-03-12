@@ -1,7 +1,7 @@
 import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox,
-    QListWidget, QAbstractItemView, QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog
+    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog
 )
 from PyQt5.QtCore import Qt, pyqtSlot, QMetaObject, Q_ARG
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -51,8 +51,8 @@ class MessageViewer(QWidget):
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["Hora", "Topic", "Realm"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
@@ -72,7 +72,7 @@ class MessageViewer(QWidget):
 class SubscriberTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Mapeo: realm -> [topics]
+        self.realms_config = {}  # Configuración: realm -> {"router_url": ..., "topics": [...]}
         self.initUI()
         self.autoLoadRealmsTopics()  # Carga automática desde config
 
@@ -108,7 +108,7 @@ class SubscriberTab(QWidget):
         self.topicsCombo.setEditable(True)
         self.topicsCombo.addItem("default")
         topicsLayout.addWidget(self.topicsCombo)
-        btnLayout = QVBoxLayout()
+        btnLayout = QHBoxLayout()
         self.loadTopicsButton = QPushButton("Cargar Topics desde archivo")
         self.loadTopicsButton.clicked.connect(self.loadTopics)
         btnLayout.addWidget(self.loadTopicsButton)
@@ -118,7 +118,6 @@ class SubscriberTab(QWidget):
         self.addTopicButton = QPushButton("Agregar")
         self.addTopicButton.clicked.connect(self.addTopic)
         btnLayout.addWidget(self.addTopicButton)
-        # Botón para borrar tópico (se puede agregar aquí)
         self.delTopicButton = QPushButton("Borrar tópico")
         self.delTopicButton.clicked.connect(self.deleteTopic)
         btnLayout.addWidget(self.delTopicButton)
@@ -147,10 +146,17 @@ class SubscriberTab(QWidget):
         self.setLayout(mainLayout)
 
     def onRealmChanged(self, new_realm):
-        if self.realms_topics and new_realm in self.realms_topics:
+        if self.realms_config and new_realm in self.realms_config:
+            config = self.realms_config[new_realm]
+            self.urlEdit.setText(config.get("router_url", "ws://127.0.0.1:60001"))
             self.topicsCombo.clear()
-            self.topicsCombo.addItems(self.realms_topics[new_realm])
+            topics = config.get("topics", [])
+            if topics:
+                self.topicsCombo.addItems(topics)
+            else:
+                self.topicsCombo.addItem("default")
         else:
+            self.urlEdit.setText("ws://127.0.0.1:60001")
             self.topicsCombo.clear()
             self.topicsCombo.addItem("default")
 
@@ -182,7 +188,6 @@ class SubscriberTab(QWidget):
             self.newTopicEdit.clear()
 
     def deleteTopic(self):
-        # Eliminar el tópico seleccionado del combo
         index = self.topicsCombo.currentIndex()
         if index >= 0:
             self.topicsCombo.removeItem(index)
@@ -193,13 +198,13 @@ class SubscriberTab(QWidget):
             try:
                 with open(default_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self.realms_topics = data.get("realms", {})
+                self.realms_config = data.get("realms", {})
                 self.realmCombo.clear()
-                self.realmCombo.addItems(sorted(self.realms_topics.keys()))
+                self.realmCombo.addItems(sorted(self.realms_config.keys()))
                 current_realm = self.realmCombo.currentText()
                 self.topicsCombo.clear()
-                if current_realm in self.realms_topics:
-                    self.topicsCombo.addItems(self.realms_topics[current_realm])
+                if current_realm in self.realms_config:
+                    self.topicsCombo.addItems(self.realms_config[current_realm].get("topics", []))
                 else:
                     self.topicsCombo.addItem("default")
             except Exception as e:

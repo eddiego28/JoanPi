@@ -2,7 +2,7 @@ import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
-    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox, QDialog, QDialogButtonBox
+    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox
 )
 from PyQt5.QtCore import Qt, QTimer
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -51,25 +51,6 @@ def send_message_now(topic, message, delay=0):
         print("Mensaje enviado en", topic, ":", message)
     asyncio.run_coroutine_threadsafe(_send(), global_loop)
 
-# Diálogo para agregar una configuración de realm (realm + router URL)
-class RealmConfigDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Agregar Configuración de Realm")
-        self.setModal(True)
-        layout = QFormLayout(self)
-        self.realmEdit = QLineEdit()
-        self.routerUrlEdit = QLineEdit()
-        layout.addRow("Realm:", self.realmEdit)
-        layout.addRow("Router URL:", self.routerUrlEdit)
-        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.rejected.connect(self.reject)
-        layout.addWidget(self.buttonBox)
-
-    def getData(self):
-        return self.realmEdit.text().strip(), self.routerUrlEdit.text().strip()
-
 class PublisherMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -110,14 +91,13 @@ class PublisherTab(QWidget):
         super().__init__(parent)
         self.msgWidgets = []
         self.next_id = 1
-        self.realms_topics = {}   # Mapeo: realm -> [topics]
-        self.realm_configs = {}   # Mapeo: realm -> router URL (global)
+        # realms_config es un dict: realm -> {"router_url": ..., "topics": [...] }
+        self.realms_config = {}
         self.initUI()
         self.autoLoadRealmsTopics()  # Carga automática desde config
 
     def initUI(self):
         layout = QVBoxLayout()
-        # Top layout con botones para mensajes y proyecto
         topLayout = QHBoxLayout()
         self.addMsgButton = QPushButton("Agregar mensaje")
         self.addMsgButton.clicked.connect(self.addMessage)
@@ -132,24 +112,6 @@ class PublisherTab(QWidget):
         self.loadRealmsButton.clicked.connect(self.loadRealmsTopics)
         topLayout.addWidget(self.loadRealmsButton)
         layout.addLayout(topLayout)
-
-        # Sección para gestionar configuraciones de realms (realm y router URL)
-        realmConfigGroup = QGroupBox("Configuración de Realms")
-        rcLayout = QVBoxLayout()
-        self.realmTable = QTableWidget(0, 2)
-        self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
-        self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        rcLayout.addWidget(self.realmTable)
-        rcButtonsLayout = QHBoxLayout()
-        self.addRealmConfigButton = QPushButton("Agregar Configuración")
-        self.addRealmConfigButton.clicked.connect(self.addRealmConfig)
-        rcButtonsLayout.addWidget(self.addRealmConfigButton)
-        self.delRealmConfigButton = QPushButton("Eliminar Configuración")
-        self.delRealmConfigButton.clicked.connect(self.deleteRealmConfig)
-        rcButtonsLayout.addWidget(self.delRealmConfigButton)
-        rcLayout.addLayout(rcButtonsLayout)
-        realmConfigGroup.setLayout(rcLayout)
-        layout.addWidget(realmConfigGroup)
 
         splitter = QSplitter(Qt.Vertical)
         self.msgArea = QScrollArea()
@@ -175,48 +137,11 @@ class PublisherTab(QWidget):
         layout.addWidget(self.viewer)
         self.setLayout(layout)
 
-    def addRealmConfig(self):
-        dlg = RealmConfigDialog(self)
-        if dlg.exec_() == QDialog.Accepted:
-            realm, router_url = dlg.getData()
-            if realm:
-                row = self.realmTable.rowCount()
-                self.realmTable.insertRow(row)
-                self.realmTable.setItem(row, 0, QTableWidgetItem(realm))
-                self.realmTable.setItem(row, 1, QTableWidgetItem(router_url))
-                self.realm_configs[realm] = router_url
-                # Actualizar realms en widgets
-                self.updateRealmsInWidgets()
-
-    def deleteRealmConfig(self):
-        selected = self.realmTable.selectedItems()
-        if selected:
-            row = selected[0].row()
-            realm_item = self.realmTable.item(row, 0)
-            if realm_item:
-                realm = realm_item.text()
-                self.realmTable.removeRow(row)
-                if realm in self.realm_configs:
-                    del self.realm_configs[realm]
-                self.updateRealmsInWidgets()
-
-    def updateRealmsInWidgets(self):
-        # Actualiza self.realms_topics basado en las claves de realm_configs
-        for realm in self.realm_configs:
-            if realm not in self.realms_topics:
-                self.realms_topics[realm] = ["default"]
-        for widget in self.msgWidgets:
-            widget.updateRealmsTopics(self.realms_topics)
-
     def addMessage(self):
         from .pubEditor import PublisherEditorWidget
         widget = MessageConfigWidget(self.next_id, parent=self)
-        if self.realms_topics:
-            widget.updateRealmsTopics(self.realms_topics)
-        # Si el realm seleccionado tiene un router configurado, se asigna
-        selected_realm = widget.realmCombo.currentText()
-        if selected_realm in self.realm_configs:
-            widget.urlEdit.setText(self.realm_configs[selected_realm])
+        if self.realms_config:
+            widget.updateRealmsConfig(self.realms_config)
         self.msgLayout.addWidget(widget)
         self.msgWidgets.append(widget)
         self.next_id += 1
@@ -233,8 +158,9 @@ class PublisherTab(QWidget):
     def startPublisher(self):
         for widget in self.msgWidgets:
             config = widget.getConfig()
-            if config["realm"] in self.realm_configs:
-                config["router_url"] = self.realm_configs[config["realm"]]
+            # Si el realm está en la configuración, asignar su router_url
+            if config["realm"] in self.realms_config:
+                config["router_url"] = self.realms_config[config["realm"]].get("router_url", config["router_url"])
                 widget.urlEdit.setText(config["router_url"])
             start_publisher(config["router_url"], config["realm"], config["topic"])
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -257,14 +183,11 @@ class PublisherTab(QWidget):
 
     def getProjectConfig(self):
         scenarios = [widget.getConfig() for widget in self.msgWidgets]
-        return {"scenarios": scenarios, "realm_configs": self.realm_configs}
+        return {"scenarios": scenarios, "realms_config": self.realms_config}
 
     def loadProjectFromConfig(self, pub_config):
         scenarios = pub_config.get("scenarios", [])
-        self.realm_configs = pub_config.get("realm_configs", {})
-        for realm in self.realm_configs:
-            if realm not in self.realms_topics:
-                self.realms_topics[realm] = ["default"]
+        self.realms_config = pub_config.get("realms_config", {})
         self.msgWidgets = []
         self.next_id = 1
         while self.msgLayout.count():
@@ -279,14 +202,14 @@ class PublisherTab(QWidget):
             widget.topicCombo.setCurrentText(scenario.get("topic", "default"))
             widget.editorWidget.commonTimeEdit.setText(scenario.get("time", "00:00:00"))
             widget.editorWidget.jsonPreview.setPlainText(json.dumps(scenario.get("content", {}), indent=2, ensure_ascii=False))
-            if self.realms_topics:
-                widget.updateRealmsTopics(self.realms_topics)
+            if self.realms_config:
+                widget.updateRealmsConfig(self.realms_config)
             self.msgLayout.addWidget(widget)
             self.msgWidgets.append(widget)
             self.next_id += 1
 
     def loadProject(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Seleccione Archivo de Proyecto", "", "JSON Files (*.json);;All Files (*)")
+        filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Proyecto", "", "JSON Files (*.json);;All Files (*)")
         if not filepath:
             return
         try:
@@ -310,9 +233,9 @@ class PublisherTab(QWidget):
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            self.realms_topics = data.get("realms", {})
+            self.realms_config = data.get("realms", {})
             for widget in self.msgWidgets:
-                widget.updateRealmsTopics(self.realms_topics)
+                widget.updateRealmsConfig(self.realms_config)
             QMessageBox.information(self, "Realms/Topics", "Realms y Topics cargados correctamente.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo cargar Realms/Topics:\n{e}")
@@ -323,9 +246,9 @@ class PublisherTab(QWidget):
             try:
                 with open(default_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self.realms_topics = data.get("realms", {})
+                self.realms_config = data.get("realms", {})
                 for widget in self.msgWidgets:
-                    widget.updateRealmsTopics(self.realms_topics)
+                    widget.updateRealmsConfig(self.realms_config)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error al cargar Realms/Topics por defecto:\n{e}")
 
@@ -333,7 +256,7 @@ class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
         self.msg_id = msg_id
-        self.realms_topics = {}  # Mapeo para este widget
+        self.realms_config = {}  # Configuración de realms: realm -> {"router_url":..., "topics": [...]}
         self.setTitle(f"Mensaje #{self.msg_id}")
         self.setCheckable(True)
         self.setChecked(True)
@@ -344,7 +267,7 @@ class MessageConfigWidget(QGroupBox):
         self.contentWidget = QWidget()
         contentLayout = QVBoxLayout()
         formLayout = QFormLayout()
-        # Configuración del realm
+        # Realm
         self.realmCombo = QComboBox()
         self.realmCombo.addItems(["default"])
         self.realmCombo.setMinimumWidth(200)
@@ -360,7 +283,7 @@ class MessageConfigWidget(QGroupBox):
         formLayout.addRow("Realm:", realmLayout)
         self.urlEdit = QLineEdit("ws://127.0.0.1:60001")
         formLayout.addRow("Router URL:", self.urlEdit)
-        # Configuración del topic
+        # Topic
         topicLayout = QHBoxLayout()
         self.topicCombo = QComboBox()
         self.topicCombo.setEditable(True)
@@ -378,7 +301,6 @@ class MessageConfigWidget(QGroupBox):
         from .pubEditor import PublisherEditorWidget
         self.editorWidget = PublisherEditorWidget(parent=self)
         contentLayout.addWidget(self.editorWidget)
-        # Botones para enviar y eliminar mensaje
         btnLayout = QHBoxLayout()
         self.sendButton = QPushButton("Enviar")
         self.sendButton.clicked.connect(self.sendMessage)
@@ -387,7 +309,6 @@ class MessageConfigWidget(QGroupBox):
         self.deleteButton.clicked.connect(self.deleteSelf)
         btnLayout.addWidget(self.deleteButton)
         contentLayout.addLayout(btnLayout)
-
         self.contentWidget.setLayout(contentLayout)
         mainLayout = QVBoxLayout()
         mainLayout.addWidget(self.contentWidget)
@@ -409,20 +330,28 @@ class MessageConfigWidget(QGroupBox):
             self.newTopicEdit.clear()
 
     def onRealmChanged(self, new_realm):
-        if self.realms_topics and new_realm in self.realms_topics:
+        # Actualiza el router URL y los tópicos si existen en la configuración
+        if self.realms_config and new_realm in self.realms_config:
+            config = self.realms_config[new_realm]
+            self.urlEdit.setText(config.get("router_url", "ws://127.0.0.1:60001"))
             self.topicCombo.clear()
-            self.topicCombo.addItems(self.realms_topics[new_realm])
+            topics = config.get("topics", [])
+            if topics:
+                self.topicCombo.addItems(topics)
+            else:
+                self.topicCombo.addItem("default")
         else:
+            self.urlEdit.setText("ws://127.0.0.1:60001")
             self.topicCombo.clear()
             self.topicCombo.addItem("default")
 
-    def updateRealmsTopics(self, realms_topics):
-        self.realms_topics = realms_topics
+    def updateRealmsConfig(self, realms_config):
+        self.realms_config = realms_config
         current_realm = self.realmCombo.currentText()
         self.realmCombo.clear()
-        self.realmCombo.addItems(sorted(realms_topics.keys()))
-        if current_realm not in realms_topics:
-            current_realm = sorted(realms_topics.keys())[0] if realms_topics else "default"
+        self.realmCombo.addItems(sorted(realms_config.keys()))
+        if current_realm not in realms_config:
+            current_realm = sorted(realms_config.keys())[0] if realms_config else "default"
         self.realmCombo.setCurrentText(current_realm)
         self.onRealmChanged(current_realm)
 

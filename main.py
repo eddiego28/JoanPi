@@ -20,7 +20,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.subscriberTab, "Suscriptor")
         mainLayout.addWidget(self.tabs)
 
-        # Botones para cargar y guardar el proyecto
         projLayout = QHBoxLayout()
         self.loadProjButton = QPushButton("Cargar Proyecto")
         self.loadProjButton.clicked.connect(self.loadProject)

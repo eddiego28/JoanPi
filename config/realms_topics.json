@@ -1,6 +1,12 @@
 {
   "realms": {
-      "default": ["com.ads.midshmi.topic", "otro.topic"],
-      "ADS.MIDSHMI": ["some.topic", "another.topic"]
+    "default": {
+      "router_url": "ws://127.0.0.1:60001",
+      "topics": ["com.ads.midshmi.topic", "otro.topic"]
+    },
+    "ADS.MIDSHMI": {
+      "router_url": "ws://127.0.0.1:60002",
+      "topics": ["some.topic", "another.topic"]
+    }
   }
 }

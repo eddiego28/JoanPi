@@ -89,7 +89,7 @@ class MessageConfigWidget(QGroupBox):
         super().__init__(publisherTab)
         self.publisherTab = publisherTab  # Referencia al PublisherTab
         self.msg_id = msg_id
-        self.realms_topics = {}  # Configuración local (se actualizará desde la global)
+        self.realms_topics = {}  # Configuración local
         self.setTitle(f"Mensaje #{self.msg_id}")
         self.setCheckable(True)
         self.setChecked(True)
@@ -133,7 +133,7 @@ class MessageConfigWidget(QGroupBox):
         self.delTopicBtn.clicked.connect(self.deleteTopicRow)
         topicBtnLayout.addWidget(self.delTopicBtn)
         formLayout.addRow("", topicBtnLayout)
-        # Campo Default Router URL (en caso de que la tabla no tenga valor)
+        # Campo de Default Router URL (en caso de que la tabla no tenga valor)
         self.defaultUrlEdit = QLineEdit("ws://127.0.0.1:60001")
         formLayout.addRow("Default Router URL:", self.defaultUrlEdit)
         # Modo de envío
@@ -143,10 +143,10 @@ class MessageConfigWidget(QGroupBox):
         formContainer = QWidget()
         formContainer.setLayout(formLayout)
         contentLayout.addWidget(formContainer)
-        # Editor de mensaje (código JSON, tiempo, etc.)
+        # Editor de mensaje
         self.editorWidget = PublisherEditorWidget(parent=self)
         contentLayout.addWidget(self.editorWidget)
-        # Solo se deja el botón de Enviar
+        # Solo se deja el botón de Enviar (se quita el de eliminar mensaje en el widget)
         sideLayout = QHBoxLayout()
         self.sendButton = QPushButton("Enviar")
         self.sendButton.clicked.connect(self.sendMessage)
@@ -210,7 +210,7 @@ class MessageConfigWidget(QGroupBox):
             self.realmTable.setItem(row, 0, itemRealm)
             url = self.publisherTab.realm_configs.get(realm, "")
             self.realmTable.setItem(row, 1, QTableWidgetItem(url))
-        # Actualiza la tabla de topics según el primer realm seleccionado
+        # Actualiza la tabla de topics con los topics del primer realm marcado
         if self.realmTable.rowCount() > 0:
             self.updateTopicsFromSelectedRealm(0, 0)
 
@@ -307,24 +307,3 @@ class MessageConfigWidget(QGroupBox):
             "template": "",  # Se elimina la sección de template
             "content": json.loads(self.editorWidget.jsonPreview.toPlainText())
         }
-
-    # Método para actualizar la configuración local (si se carga proyecto)
-    def updateConfig(self, config):
-        # Se espera que config tenga keys: realms, router_url, topics, time, mode, content
-        for realm in config.get("realms", ["default"]):
-            self.realmTable.insertRow(self.realmTable.rowCount())
-            self.realmTable.setItem(self.realmTable.rowCount()-1, 0, QTableWidgetItem(realm))
-            self.realmTable.setItem(self.realmTable.rowCount()-1, 1, QTableWidgetItem(config.get("router_url", "ws://127.0.0.1:60001")))
-        for topic in config.get("topics", ["default"]):
-            row = self.topicTable.rowCount()
-            self.topicTable.insertRow(row)
-            itemTopic = QTableWidgetItem(topic)
-            itemTopic.setFlags(itemTopic.flags() | Qt.ItemIsUserCheckable)
-            itemTopic.setCheckState(Qt.Checked)
-            self.topicTable.setItem(row, 0, itemTopic)
-        self.defaultUrlEdit.setText(config.get("router_url", "ws://127.0.0.1:60001"))
-        self.editorWidget.commonTimeEdit.setText(config.get("time", "00:00:00"))
-        self.editorWidget.jsonPreview.setPlainText(json.dumps(config.get("content", {}), indent=2, ensure_ascii=False))
-        self.modeCombo.setCurrentText(config.get("mode", "On demand"))
-
-# Fin de SubscriberTab

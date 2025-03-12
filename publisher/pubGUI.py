@@ -2,8 +2,7 @@ import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
-    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox,
-    QListWidget, QListWidgetItem
+    QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox
 )
 from PyQt5.QtCore import Qt, QTimer
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -86,7 +85,7 @@ class PublisherMessageViewer(QWidget):
             dlg = JsonDetailDialog(self.pubMessages[row], self)
             dlg.exec_()
 
-# Tab Publicador con barra de herramientas agrupada
+# Tab Publicador
 class PublisherTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -241,9 +240,12 @@ class PublisherTab(QWidget):
                 url = scenario.get("router_url", "ws://127.0.0.1:60001")
                 widget.realmTable.setItem(widget.realmTable.rowCount()-1, 1, QTableWidgetItem(url))
             for topic in scenario.get("topics", ["default"]):
-                item = QListWidgetItem(topic)
-                item.setCheckState(Qt.Checked)
-                widget.topicList.addItem(item)
+                row = widget.topicTable.rowCount()
+                widget.topicTable.insertRow(row)
+                itemTopic = QTableWidgetItem(topic)
+                itemTopic.setFlags(itemTopic.flags() | Qt.ItemIsUserCheckable)
+                itemTopic.setCheckState(Qt.Checked)
+                widget.topicTable.setItem(row, 0, itemTopic)
             widget.urlEdit.setText(scenario.get("router_url", "ws://127.0.0.1:60001"))
             widget.editorWidget.commonTimeEdit.setText(scenario.get("time", "00:00:00"))
             widget.editorWidget.jsonPreview.setPlainText(json.dumps(scenario.get("content", {}), indent=2, ensure_ascii=False))
@@ -274,7 +276,7 @@ class PublisherTab(QWidget):
         QMessageBox.information(self, "Proyecto", "Proyecto cargado correctamente.")
 
     def loadRealmsTopics(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Realms/Topics", "", "JSON Files (*.json);;All Files (*)")
+        filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Realms/Topic", "", "JSON Files (*.json);;All Files (*)")
         if not filepath:
             return
         try:
@@ -284,9 +286,9 @@ class PublisherTab(QWidget):
             self.realm_configs = data.get("realm_configs", self.realm_configs)
             for widget in self.msgWidgets:
                 widget.updateRealmsTopics(self.realms_topics)
-            QMessageBox.information(self, "Realms/Topics", "Realms y Topics cargados correctamente.")
+            QMessageBox.information(self, "Realms/Topic", "Realms y Topics cargados correctamente.")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo cargar Realms/Topics:\n{e}")
+            QMessageBox.critical(self, "Error", f"No se pudo cargar Realms/Topic:\n{e}")
 
     def autoLoadRealmsTopics(self):
         default_path = os.path.join(os.path.dirname(__file__), "..", "config", "realms_topics.json")
@@ -299,12 +301,13 @@ class PublisherTab(QWidget):
                 for widget in self.msgWidgets:
                     widget.updateRealmsTopics(self.realms_topics)
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error al cargar Realms/Topics por defecto:\n{e}")
+                QMessageBox.critical(self, "Error", f"Error al cargar Realms/Topic por defecto:\n{e}")
 
 # Clase para cada mensaje (escenario)
 class MessageConfigWidget(QGroupBox):
-    def __init__(self, msg_id, parent=None):
-        super().__init__(parent)
+    def __init__(self, msg_id, publisherTab):
+        super().__init__(publisherTab)
+        self.publisherTab = publisherTab  # Guarda la referencia al PublisherTab
         self.msg_id = msg_id
         self.realms_topics = {}  # Configuración local
         self.templatePath = ""
@@ -323,7 +326,7 @@ class MessageConfigWidget(QGroupBox):
         self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
         self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         formLayout.addRow("Realms:", self.realmTable)
-        # Botones para gestionar realms en la tabla
+        # Botones para gestionar realms
         realmBtnLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo realm")
@@ -369,14 +372,13 @@ class MessageConfigWidget(QGroupBox):
         self.loadTemplateBtn.clicked.connect(self.loadTemplate)
         templateLayout.addWidget(self.loadTemplateBtn)
         formLayout.addRow("Template:", templateLayout)
-        
         formContainer = QWidget()
         formContainer.setLayout(formLayout)
         contentLayout.addWidget(formContainer)
         # Editor de mensaje
         self.editorWidget = PublisherEditorWidget(parent=self)
         contentLayout.addWidget(self.editorWidget)
-        # Barra lateral de botones: Enviar y Eliminar mensaje
+        # Barra lateral de botones (Enviar y Eliminar mensaje)
         sideLayout = QVBoxLayout()
         self.sendButton = QPushButton("Enviar")
         self.sendButton.clicked.connect(self.sendMessage)
@@ -393,7 +395,6 @@ class MessageConfigWidget(QGroupBox):
         self.setLayout(outerLayout)
 
     def loadTemplate(self):
-        # Método para cargar un template desde la carpeta Templates
         base_dir = os.path.join(os.path.dirname(__file__), "..", "Templates")
         filepath, _ = QFileDialog.getOpenFileName(self, "Seleccionar Template", base_dir, "JSON Files (*.json);;All Files (*)")
         if filepath:
@@ -524,7 +525,7 @@ class MessageConfigWidget(QGroupBox):
     def sendMessage(self):
         try:
             h, m, s = map(int, self.editorWidget.commonTimeEdit.text().strip().split(":"))
-            delay = h * 3600 + m * 60 + s
+            delay = h*3600 + m*60 + s
         except:
             delay = 0
         topics = self.getSelectedTopics()
@@ -546,7 +547,7 @@ class MessageConfigWidget(QGroupBox):
             self.parent().addPublisherLog(self.getSelectedRealms(), ", ".join(topics), publish_time_str, sent_message)
 
     def deleteSelf(self):
-        self.parent().parent().removeMessage(self)
+        self.publisherTab.removeMessage(self)
 
     def getConfig(self):
         return {

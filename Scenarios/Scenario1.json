@@ -2,19 +2,47 @@
   "publisher": {
     "scenarios": [
       {
-        "realm": "default",
+        "id": 1,
+        "realms": ["default", "someRealm"],
         "router_url": "ws://127.0.0.1:60001",
-        "topic": "com.ads.midshmi.topic",
+        "topics": ["default", "my.topic"],
         "time": "00:00:02",
-        "message_file": "messages/CrEnt_data.json"
+        "mode": "Programado",
+        "content": {
+          "key": "value1"
+        }
       },
       {
-        "realm": "default",
-        "router_url": "ws://127.0.0.1:60001",
-        "topic": "com.ads.midshmi.topic",
+        "id": 2,
+        "realms": ["ADS.MIDSHMI"],
+        "router_url": "ws://127.0.0.1:60002",
+        "topics": ["another.topic"],
         "time": "00:00:05",
-        "message_file": "messages/EP_data.json"
+        "mode": "Programado",
+        "content": {
+          "message": "hello2"
+        }
+      },
+      {
+        "id": 3,
+        "realms": ["default"],
+        "router_url": "ws://127.0.0.1:60001",
+        "topics": ["default"],
+        "time": "00:00:10",
+        "mode": "Programado",
+        "content": {
+          "data": "sample3"
+        }
       }
-    ]
+    ],
+    "realm_configs": {
+      "default": "ws://127.0.0.1:60001",
+      "ADS.MIDSHMI": "ws://127.0.0.1:60002",
+      "someRealm": "ws://127.0.0.1:60003"
+    }
+  },
+  "subscriber": {
+    "realms": ["default", "ADS.MIDSHMI"],
+    "topics": ["default", "my.topic", "another.topic"]
   }
 }

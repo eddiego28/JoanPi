@@ -86,16 +86,16 @@ class PublisherMessageViewer(QWidget):
             dlg = JsonDetailDialog(self.pubMessages[row], self)
             dlg.exec_()
 
-# Tab Publicador: contiene la barra de herramientas y el área de mensajes
+# Tab Publicador con barra de herramientas agrupada
 class PublisherTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.msgWidgets = []
         self.next_id = 1
-        self.realms_topics = {}    # Configuración global: realm -> [topics]
-        self.realm_configs = {}    # Configuración global: realm -> router URL
+        self.realms_topics = {}    # Global: realm -> [topics]
+        self.realm_configs = {}    # Global: realm -> router URL
         self.initUI()
-        self.autoLoadRealmsTopics()  # Carga la configuración global
+        self.autoLoadRealmsTopics()  # Carga configuración global
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -151,7 +151,7 @@ class PublisherTab(QWidget):
         splitter.setSizes([500, 200])
         layout.addWidget(splitter)
 
-        # Botón global para iniciar el publicador
+        # Botón global para iniciar publicador
         connLayout = QHBoxLayout()
         connLayout.addWidget(QLabel("Publicador Global"))
         self.globalStartButton = QPushButton("Iniciar Publicador")
@@ -301,7 +301,7 @@ class PublisherTab(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error al cargar Realms/Topics por defecto:\n{e}")
 
-# Cada mensaje (escenario) en el publicador
+# Clase para cada mensaje (escenario)
 class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
@@ -318,12 +318,12 @@ class MessageConfigWidget(QGroupBox):
         self.contentWidget = QWidget()
         contentLayout = QHBoxLayout()
         formLayout = QFormLayout()
-        # Realms: tabla con Realm y Router URL
+        # Realms: tabla con 2 columnas (Realm y Router URL)
         self.realmTable = QTableWidget(0, 2)
         self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
         self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         formLayout.addRow("Realms:", self.realmTable)
-        # Botones para gestionar realms
+        # Botones para gestionar realms en la tabla
         realmBtnLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo realm")
@@ -369,13 +369,14 @@ class MessageConfigWidget(QGroupBox):
         self.loadTemplateBtn.clicked.connect(self.loadTemplate)
         templateLayout.addWidget(self.loadTemplateBtn)
         formLayout.addRow("Template:", templateLayout)
+        
         formContainer = QWidget()
         formContainer.setLayout(formLayout)
         contentLayout.addWidget(formContainer)
         # Editor de mensaje
         self.editorWidget = PublisherEditorWidget(parent=self)
         contentLayout.addWidget(self.editorWidget)
-        # Barra lateral de botones
+        # Barra lateral de botones: Enviar y Eliminar mensaje
         sideLayout = QVBoxLayout()
         self.sendButton = QPushButton("Enviar")
         self.sendButton.clicked.connect(self.sendMessage)
@@ -390,6 +391,20 @@ class MessageConfigWidget(QGroupBox):
         outerLayout = QVBoxLayout()
         outerLayout.addWidget(self.contentWidget)
         self.setLayout(outerLayout)
+
+    def loadTemplate(self):
+        # Método para cargar un template desde la carpeta Templates
+        base_dir = os.path.join(os.path.dirname(__file__), "..", "Templates")
+        filepath, _ = QFileDialog.getOpenFileName(self, "Seleccionar Template", base_dir, "JSON Files (*.json);;All Files (*)")
+        if filepath:
+            self.templateEdit.setText(os.path.basename(filepath))
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    template_data = json.load(f)
+                self.editorWidget.jsonPreview.setPlainText(json.dumps(template_data, indent=2, ensure_ascii=False))
+                QMessageBox.information(self, "Template", "Template cargado correctamente.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo cargar el template:\n{e}")
 
     def addRealmRow(self):
         new_realm = self.newRealmEdit.text().strip()
@@ -509,7 +524,7 @@ class MessageConfigWidget(QGroupBox):
     def sendMessage(self):
         try:
             h, m, s = map(int, self.editorWidget.commonTimeEdit.text().strip().split(":"))
-            delay = h*3600 + m*60 + s
+            delay = h * 3600 + m * 60 + s
         except:
             delay = 0
         topics = self.getSelectedTopics()
@@ -544,3 +559,4 @@ class MessageConfigWidget(QGroupBox):
             "template": self.templateEdit.text().strip(),
             "content": json.loads(self.editorWidget.jsonPreview.toPlainText())
         }
+

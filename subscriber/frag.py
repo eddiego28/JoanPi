@@ -22,4 +22,4 @@ def updateTopicsFromSelectedRealm(self, row, column):
 
 # Conectar el evento de clic en la tabla de realms para actualizar topics
 self.realmTable.cellClicked.connect(self.updateTopicsFromSelectedRealm)
-#HOLA
+#HOLA Y ADIOS

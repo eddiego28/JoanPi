@@ -72,9 +72,9 @@ class MessageViewer(QWidget):
 class SubscriberTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Mapeo de realms a topics
+        self.realms_topics = {}  # Mapeo: realm -> [topics]
         self.initUI()
-        self.autoLoadRealmsTopics()  # Carga automática del fichero por defecto
+        self.autoLoadRealmsTopics()  # Carga automática desde config
 
     def initUI(self):
         mainLayout = QHBoxLayout(self)
@@ -89,7 +89,7 @@ class SubscriberTab(QWidget):
         self.realmCombo.currentTextChanged.connect(self.onRealmChanged)
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo realm")
-        self.newRealmEdit.setMinimumWidth(300)  # Mayor ancho para textos largos
+        self.newRealmEdit.setMinimumWidth(300)
         self.addRealmButton = QPushButton("Agregar realm")
         self.addRealmButton.clicked.connect(self.addRealm)
         realmLayout = QHBoxLayout()
@@ -102,7 +102,6 @@ class SubscriberTab(QWidget):
         connLayout.addWidget(self.urlEdit)
         configLayout.addLayout(connLayout)
 
-        # Desplegable editable para Topics
         topicsLayout = QHBoxLayout()
         topicsLayout.addWidget(QLabel("Topics:"))
         self.topicsCombo = QComboBox()
@@ -119,6 +118,10 @@ class SubscriberTab(QWidget):
         self.addTopicButton = QPushButton("Agregar")
         self.addTopicButton.clicked.connect(self.addTopic)
         btnLayout.addWidget(self.addTopicButton)
+        # Botón para borrar tópico (se puede agregar aquí)
+        self.delTopicButton = QPushButton("Borrar tópico")
+        self.delTopicButton.clicked.connect(self.deleteTopic)
+        btnLayout.addWidget(self.delTopicButton)
         topicsLayout.addLayout(btnLayout)
         configLayout.addLayout(topicsLayout)
 
@@ -133,7 +136,6 @@ class SubscriberTab(QWidget):
         self.resetLogButton.clicked.connect(self.resetLog)
         btnSubLayout.addWidget(self.resetLogButton)
         configLayout.addLayout(btnSubLayout)
-        # Botón para cargar configuración de realms/topics para el suscriptor
         self.loadConfigButton = QPushButton("Cargar Realm/Topic del subscriptor")
         self.loadConfigButton.clicked.connect(self.loadProjectConfig)
         configLayout.addWidget(self.loadConfigButton)
@@ -178,6 +180,12 @@ class SubscriberTab(QWidget):
         if new_topic:
             self.topicsCombo.addItem(new_topic)
             self.newTopicEdit.clear()
+
+    def deleteTopic(self):
+        # Eliminar el tópico seleccionado del combo
+        index = self.topicsCombo.currentIndex()
+        if index >= 0:
+            self.topicsCombo.removeItem(index)
 
     def autoLoadRealmsTopics(self):
         default_path = os.path.join(os.path.dirname(__file__), "..", "config", "realms_topics.json")

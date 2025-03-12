@@ -7,14 +7,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sistema WAMP: Publicador y Suscriptor")
-        self.resize(1400, 900)
+        self.resize(900, 700)
         self.initUI()
 
     def initUI(self):
         centralWidget = QWidget()
         mainLayout = QVBoxLayout(centralWidget)
         self.tabs = QTabWidget()
-        # Se crean ambos tabs
         self.publisherTab = PublisherTab(self)
         self.subscriberTab = SubscriberTab(self)
         self.tabs.addTab(self.publisherTab, "Publicador")

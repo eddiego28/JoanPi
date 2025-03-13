@@ -2,7 +2,7 @@
 import os, json, datetime, asyncio, threading, sys
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog
+    QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog, QDialog, QTreeWidget, QTreeWidgetItem, QVBoxLayout
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -15,7 +15,7 @@ global_session_sub = None
 # -----------------------------------------------------------
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
-        # El constructor recibe solo 'config' (como requiere Autobahn)
+        # El constructor recibe solo 'config'
         super().__init__(config)
         self.topics = []  # Se inyecta mediante la factoría
         self.on_message_callback = None
@@ -24,7 +24,7 @@ class MultiTopicSubscriber(ApplicationSession):
         realm_name = self.config.realm
         print(f"Suscriptor conectado en realm: {realm_name}")
         for t in self.topics:
-            # Usar parámetro por defecto en lambda para capturar el valor actual de t
+            # Usamos un parámetro por defecto en la lambda para capturar el valor actual de t
             await self.subscribe(
                 lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
                 t
@@ -56,6 +56,38 @@ def start_subscriber(url, realm, topics, on_message_callback):
     threading.Thread(target=run, daemon=True).start()
 
 # -----------------------------------------------------------
+# Clase JsonTreeDialog: muestra el JSON en formato árbol.
+# -----------------------------------------------------------
+class JsonTreeDialog(QDialog):
+    def __init__(self, json_data, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Detalle JSON - Árbol")
+        self.resize(600, 400)
+        layout = QVBoxLayout(self)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Clave", "Valor"])
+        self.tree.header().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.tree)
+        self.setLayout(layout)
+        self.buildTree(json_data, self.tree.invisibleRootItem())
+
+    def buildTree(self, data, parent):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                item = QTreeWidgetItem([str(key), ""])
+                parent.addChild(item)
+                self.buildTree(value, item)
+        elif isinstance(data, list):
+            for index, value in enumerate(data):
+                item = QTreeWidgetItem([f"[{index}]", ""])
+                parent.addChild(item)
+                self.buildTree(value, item)
+        else:
+            # Si es un valor simple, se muestra en la segunda columna
+            item = QTreeWidgetItem(["", str(data)])
+            parent.addChild(item)
+
+# -----------------------------------------------------------
 # Clase SubscriberMessageViewer: muestra los mensajes en una tabla.
 # -----------------------------------------------------------
 class SubscriberMessageViewer(QWidget):
@@ -68,11 +100,11 @@ class SubscriberMessageViewer(QWidget):
         layout = QVBoxLayout(self)
         self.table = QTableWidget()
         self.table.setColumnCount(3)
-        # Columnas: Hora, Realm, Topic
         self.table.setHorizontalHeaderLabels(["Hora", "Realm", "Topic"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        # Conectar doble clic para ver el detalle en formato árbol
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
@@ -89,27 +121,28 @@ class SubscriberMessageViewer(QWidget):
         row = item.row()
         if row < len(self.messages):
             data = self.messages[row]
-            # Convertir dict a string si es necesario
+            # Si el dato es dict, mostrarlo en formato árbol
             if isinstance(data, dict):
-                data = json.dumps(data, indent=2, ensure_ascii=False)
-            # Eliminar saltos de línea para mejor visualización en el diálogo
-            data = data.replace("\n", " ")
-            dlg = JsonDetailDialog(data, self)
-            dlg.exec_()
+                dlg = JsonTreeDialog(data, self)
+                dlg.exec_()
+            else:
+                # Si no, se muestra con el diálogo normal de texto
+                from common.utils import JsonDetailDialog
+                dlg = JsonDetailDialog(data, self)
+                dlg.exec_()
 
 # -----------------------------------------------------------
 # Clase SubscriberTab: interfaz principal del suscriptor.
 # -----------------------------------------------------------
 class SubscriberTab(QWidget):
-    # Signal para actualizar el viewer desde el hilo del suscriptor
+    # Signal para actualizar el viewer en el hilo principal
     messageReceived = pyqtSignal(str, str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se carga desde realm_topic_config.json
-        self.selected_topics_by_realm = {}  # Para mantener la selección persistente de topics por realm
+        self.realms_topics = {}  # Se cargará desde el JSON
+        self.selected_topics_by_realm = {}  # Para mantener la selección de topics por realm
         self.current_realm = None
-        # Conectar el signal directamente en el constructor (evita duplicados)
         self.messageReceived.connect(self.onMessageReceived)
         self.initUI()
         self.loadGlobalRealmTopicConfig()
@@ -171,7 +204,7 @@ class SubscriberTab(QWidget):
         
         mainLayout.addLayout(leftLayout, stretch=1)
         
-        # Lado derecho: Viewer de mensajes
+        # Lado derecho: Viewer de mensajes (tabla de logs)
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         
@@ -331,7 +364,7 @@ class SubscriberTab(QWidget):
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementar carga de proyecto si es necesario.
+        # Implementa la carga de un proyecto si es necesario.
         pass
 
 # Fin de SubscriberTab

@@ -1,5 +1,5 @@
 # subscriber/subGUI.py
-import os, json, datetime, logging, asyncio, threading
+import os, json, datetime, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog
@@ -10,18 +10,20 @@ from common.utils import log_to_file, JsonDetailDialog
 
 global_session_sub = None
 
-# -------------------------------
-# Clase MultiTopicSubscriber con factoría
-# -------------------------------
+# -----------------------------------------------------------
+# Clase MultiTopicSubscriber: sesión WAMP para suscripción
+# -----------------------------------------------------------
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
+        # Constructor que recibe solo config, como requiere Autobahn.
         super().__init__(config)
-        self.topics = []
-        self.on_message_callback = None
+        self.topics = []  # Se inyectan desde la factoría
+        self.on_message_callback = None  # Se inyecta desde la factoría
 
     async def onJoin(self, details):
-        realm_name = self.config.realm
+        realm_name = self.config.realm  # Se obtiene del config
         print(f"Suscriptor conectado en realm: {realm_name}")
+        # Suscribirse a cada topic de la lista inyectada
         for t in self.topics:
             await self.subscribe(
                 lambda *args, **kwargs: self.on_event(realm_name, t, *args, **kwargs),
@@ -29,12 +31,17 @@ class MultiTopicSubscriber(ApplicationSession):
             )
 
     def on_event(self, realm, topic, *args, **kwargs):
+        # Construye la data del mensaje y llama al callback inyectado
         message_data = {"args": args, "kwargs": kwargs}
         if self.on_message_callback:
             self.on_message_callback(realm, topic, message_data)
 
     @classmethod
     def factory(cls, topics, on_message_callback):
+        """
+        Factoría que recibe topics y callback, y devuelve una función
+        que crea la sesión a partir de config.
+        """
         def create_session(config):
             session = cls(config)
             session.topics = topics
@@ -42,6 +49,9 @@ class MultiTopicSubscriber(ApplicationSession):
             return session
         return create_session
 
+# -----------------------------------------------------------
+# Función start_subscriber: inicia la sesión en un hilo separado.
+# -----------------------------------------------------------
 def start_subscriber(url, realm, topics, on_message_callback):
     def run():
         loop = asyncio.new_event_loop()
@@ -50,24 +60,25 @@ def start_subscriber(url, realm, topics, on_message_callback):
         runner.run(MultiTopicSubscriber.factory(topics, on_message_callback))
     threading.Thread(target=run, daemon=True).start()
 
-# -------------------------------
-# Vista de Mensajes del Suscriptor
-# -------------------------------
+# -----------------------------------------------------------
+# Clase SubscriberMessageViewer: muestra mensajes en una tabla.
+# -----------------------------------------------------------
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.messages = []
+        self.messages = []  # Almacena los detalles de cada mensaje recibido
         self.initUI()
         
     def initUI(self):
         layout = QVBoxLayout(self)
         self.table = QTableWidget()
         self.table.setColumnCount(3)
-        # Orden: Hora, Realm, Topic
+        # Orden de columnas: Hora, Realm, Topic
         self.table.setHorizontalHeaderLabels(["Hora", "Realm", "Topic"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        # Conectar doble clic para ver detalles del JSON
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
@@ -89,13 +100,13 @@ class SubscriberMessageViewer(QWidget):
             dlg = JsonDetailDialog(data, self)
             dlg.exec_()
 
-# -------------------------------
-# Tab Principal del Suscriptor
-# -------------------------------
+# -----------------------------------------------------------
+# Clase SubscriberTab: interfaz principal del suscriptor.
+# -----------------------------------------------------------
 class SubscriberTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}
+        self.realms_topics = {}  # Se cargará desde realm_topic_config.json
         self.initUI()
         self.loadGlobalRealmTopicConfig()
 
@@ -104,6 +115,7 @@ class SubscriberTab(QWidget):
         
         # Lado izquierdo: Panel de Realms y Topics
         leftLayout = QVBoxLayout()
+        
         lblRealms = QLabel("Realms (checkbox) + Router URL:")
         leftLayout.addWidget(lblRealms)
         self.realmTable = QTableWidget(0, 2)
@@ -111,6 +123,8 @@ class SubscriberTab(QWidget):
         self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.realmTable.cellClicked.connect(self.onRealmClicked)
         leftLayout.addWidget(self.realmTable)
+        
+        # Botones para agregar/borrar realms
         realmBtnLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo Realm")
@@ -129,6 +143,8 @@ class SubscriberTab(QWidget):
         self.topicTable.setHorizontalHeaderLabels(["Topic"])
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         leftLayout.addWidget(self.topicTable)
+        
+        # Botones para agregar/borrar topics
         topicBtnLayout = QHBoxLayout()
         self.newTopicEdit = QLineEdit()
         self.newTopicEdit.setPlaceholderText("Nuevo Topic")
@@ -141,6 +157,7 @@ class SubscriberTab(QWidget):
         topicBtnLayout.addWidget(self.btnDelTopic)
         leftLayout.addLayout(topicBtnLayout)
         
+        # Botones de control: Suscribirse y Resetear log
         ctrlLayout = QHBoxLayout()
         self.btnSubscribe = QPushButton("Suscribirse")
         self.btnSubscribe.clicked.connect(self.startSubscription)
@@ -149,6 +166,7 @@ class SubscriberTab(QWidget):
         self.btnReset.clicked.connect(self.resetLog)
         ctrlLayout.addWidget(self.btnReset)
         leftLayout.addLayout(ctrlLayout)
+        
         mainLayout.addLayout(leftLayout, stretch=1)
         
         # Lado derecho: Viewer de mensajes
@@ -163,6 +181,17 @@ class SubscriberTab(QWidget):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                # Si el JSON es una lista, convertirlo a dict:
+                if isinstance(data, list):
+                    realms_dict = {}
+                    for item in data:
+                        realm = item.get("realm")
+                        if realm:
+                            realms_dict[realm] = {
+                                "router_url": item.get("router_url", "ws://127.0.0.1:60001/ws"),
+                                "topics": item.get("topics", [])
+                            }
+                    data = {"realms": realms_dict}
                 self.realms_topics = data.get("realms", {})
                 print("Configuración global de realms/topics cargada (suscriptor).")
                 self.populateRealmTable()
@@ -242,6 +271,7 @@ class SubscriberTab(QWidget):
             self.topicTable.removeRow(row)
 
     def startSubscription(self):
+        # Recorre cada realm marcado
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
             url_item = self.realmTable.item(row, 1)
@@ -249,6 +279,7 @@ class SubscriberTab(QWidget):
                 realm = realm_item.text().strip()
                 router_url = url_item.text().strip() if url_item else "ws://127.0.0.1:60001/ws"
                 selected_topics = []
+                # Recorre la tabla de topics (se muestran según el realm seleccionado)
                 for t_row in range(self.topicTable.rowCount()):
                     t_item = self.topicTable.item(t_row, 0)
                     if t_item and t_item.checkState() == Qt.Checked:
@@ -269,7 +300,7 @@ class SubscriberTab(QWidget):
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementar carga de proyecto si es necesarioJ
+        # Aquí podrías implementar la carga de un proyecto, si es necesario.
         pass
 
 # Fin de SubscriberTab

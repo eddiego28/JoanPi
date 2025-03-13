@@ -15,15 +15,13 @@ global_session_sub = None
 # -----------------------------------------------------------
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
-        # Constructor: solo recibe config (como requiere Autobahn)
         super().__init__(config)
-        self.topics = []
+        self.topics = []  # Se inyecta mediante la factoría
         self.on_message_callback = None
 
     async def onJoin(self, details):
         realm_name = self.config.realm
         print(f"Suscriptor conectado en realm: {realm_name}")
-        # Suscribirse a cada topic inyectado
         for t in self.topics:
             await self.subscribe(
                 lambda *args, **kwargs: self.on_event(realm_name, t, *args, **kwargs),
@@ -61,19 +59,18 @@ def start_subscriber(url, realm, topics, on_message_callback):
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.messages = []  # Almacena los detalles completos de cada mensaje
+        self.messages = []  # Almacena los detalles completos de cada mensaje recibido
         self.initUI()
         
     def initUI(self):
         layout = QVBoxLayout(self)
         self.table = QTableWidget()
         self.table.setColumnCount(3)
-        # Orden de columnas: Hora, Realm, Topic
+        # Orden: Hora, Realm, Topic
         self.table.setHorizontalHeaderLabels(["Hora", "Realm", "Topic"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        # Doble clic para ver detalles
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
@@ -99,15 +96,15 @@ class SubscriberMessageViewer(QWidget):
 # Clase SubscriberTab: interfaz principal del suscriptor.
 # -----------------------------------------------------------
 class SubscriberTab(QWidget):
-    # Definimos un signal que se emite con (realm, topic, timestamp, details)
+    # Signal para actualizar el viewer desde el hilo del suscriptor
     messageReceived = pyqtSignal(str, str, str, str)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se cargará desde config/realm_topic_config.json
-        # Para guardar la selección persistente de topics por realm
-        self.selected_topics_by_realm = {}
+        self.realms_topics = {}  # Se cargará desde realm_topic_config.json
+        self.selected_topics_by_realm = {}  # Para mantener la selección de topics por realm
         self.current_realm = None
+        # Conectar el signal directamente en el constructor
         self.messageReceived.connect(self.onMessageReceived)
         self.initUI()
         self.loadGlobalRealmTopicConfig()
@@ -143,7 +140,7 @@ class SubscriberTab(QWidget):
         self.topicTable = QTableWidget(0, 1)
         self.topicTable.setHorizontalHeaderLabels(["Topic"])
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        # Conectar para guardar la selección de topics
+        # Conectar para actualizar la selección de topics
         self.topicTable.itemChanged.connect(self.onTopicItemChanged)
         leftLayout.addWidget(self.topicTable)
         
@@ -170,7 +167,7 @@ class SubscriberTab(QWidget):
         
         mainLayout.addLayout(leftLayout, stretch=1)
         
-        # Lado derecho: Viewer de mensajes (tabla de logs)
+        # Lado derecho: Viewer de mensajes
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         
@@ -211,7 +208,6 @@ class SubscriberTab(QWidget):
             self.realmTable.setItem(row, 0, itemRealm)
             router_url = info.get("router_url", "ws://127.0.0.1:60001/ws")
             self.realmTable.setItem(row, 1, QTableWidgetItem(router_url))
-        # Si hay al menos una fila, seleccionar la primera para cargar topics
         if self.realmTable.rowCount() > 0:
             self.realmTable.selectRow(0)
             self.onRealmClicked(0, 0)
@@ -221,7 +217,6 @@ class SubscriberTab(QWidget):
         if realm_item:
             realm = realm_item.text().strip()
             self.current_realm = realm
-            # Si ya se tenía una selección para este realm, la usamos; sino, marcamos todos por defecto.
             if realm not in self.selected_topics_by_realm:
                 topics = set(self.realms_topics.get(realm, {}).get("topics", []))
                 self.selected_topics_by_realm[realm] = topics
@@ -300,65 +295,45 @@ class SubscriberTab(QWidget):
             self.topicTable.removeRow(row)
 
     def startSubscription(self):
-        # Para cada realm marcado, se recogen los topics marcados de la tabla
+        # Para cada realm marcado, recoge los topics marcados y suscríbete
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
             url_item = self.realmTable.item(row, 1)
             if realm_item and realm_item.checkState() == Qt.Checked:
                 realm = realm_item.text().strip()
                 router_url = url_item.text().strip() if url_item else "ws://127.0.0.1:60001/ws"
-                # Recoger los topics marcados: aquí se usa la selección actual en topicTable
                 selected_topics = []
                 for t_row in range(self.topicTable.rowCount()):
                     t_item = self.topicTable.item(t_row, 0)
                     if t_item and t_item.checkState() == Qt.Checked:
                         selected_topics.append(t_item.text().strip())
                 if selected_topics:
-                    # Se inicia la suscripción para este realm con los topics seleccionados
                     start_subscriber(router_url, realm, selected_topics, self.handleMessage)
                     print(f"Suscrito a realm '{realm}' con topics {selected_topics}")
                     sys.stdout.flush()
                 else:
                     QMessageBox.warning(self, "Advertencia", f"No hay topics seleccionados para realm {realm}.")
 
-    @pyqtSlot(str, str, dict)
-    def onMessageArrived(self, realm, topic, content):
-        # Este slot ya no se usa directamente; usamos handleMessage para emitir la señal
-        pass
-
     def handleMessage(self, realm, topic, content):
-        # Este método se llamará desde el hilo del suscriptor.
-        # Para actualizar la UI, usamos un signal (aquí lo hacemos directamente)
+        # Este método se llama desde el hilo del suscriptor.
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         details = json.dumps(content, indent=2, ensure_ascii=False)
-        # Emite la actualización en el hilo principal usando QMetaObject.invokeMethod o bien, directamente:
+        # Emitir la señal para actualizar el viewer en el hilo principal.
         self.messageReceived.emit(realm, topic, timestamp, details)
-        # Además, imprime en la terminal
         print(f"Mensaje recibido en realm '{realm}', topic '{topic}' a las {timestamp}")
         sys.stdout.flush()
-
-    # Definimos el signal para actualizar la UI
-    messageReceived = pyqtSignal(str, str, str, str)
 
     @pyqtSlot(str, str, str, str)
     def onMessageReceived(self, realm, topic, timestamp, details):
         self.viewer.add_message(realm, topic, timestamp, details)
 
+    # Conectar el signal en el constructor ya lo hicimos.
     def resetLog(self):
         self.viewer.table.setRowCount(0)
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementar carga de proyecto si es necesario.
+        # Implementa la carga de proyecto si es necesario.
         pass
-
-    def showEvent(self, event):
-        # Conectar el signal para que se actualice la UI
-        self.messageReceived.connect(self.onMessageReceived)
-        super().showEvent(event)
-
-    def hideEvent(self, event):
-        self.messageReceived.disconnect(self.onMessageReceived)
-        super().hideEvent(event)
 
 # Fin de SubscriberTab

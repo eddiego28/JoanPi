@@ -1,0 +1,462 @@
+2025-03-12 22:20:07,861 - 2025-03-12 22:20:07 | Topic: topic1 | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:20:07,865 - 2025-03-12 22:20:07 | Topic: topic2 | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:20:15,790 - 2025-03-12 22:20:15 | Topic: MsgEP | Realm: default
+{}
+
+2025-03-12 22:20:15,792 - 2025-03-12 22:20:15 | Topic: MsgCrEnt | Realm: default
+{}
+
+2025-03-12 22:20:15,795 - 2025-03-12 22:20:15 | Topic: MsgEP | Realm: default2
+{}
+
+2025-03-12 22:20:15,797 - 2025-03-12 22:20:15 | Topic: MsgCrEnt | Realm: default2
+{}
+
+2025-03-12 22:20:17,784 - 2025-03-12 22:20:17 | Topic: topic1 | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:20:17,786 - 2025-03-12 22:20:17 | Topic: topic2 | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:20:17,789 - 2025-03-12 22:20:17 | Topic: topic2 | Realm: default
+{
+  "args": [],
+  "kwargs": {
+    "EP": {
+      "common": {
+        "palabra1": {
+          "campo1": "valor1",
+          "campo2": "valor2",
+          "detalles": {
+            "subcampo1": "dato1",
+            "subcampo2": 123,
+            "subcampo3": [
+              "item1",
+              "item2",
+              "item3"
+            ]
+          }
+        },
+        "palabra3": {
+          "campo5": "valor5",
+          "campo6": "valor6",
+          "propiedades": {
+            "peso": 75.3,
+            "altura": 1.82,
+            "colores": [
+              "rojo",
+              "verde",
+              "azul"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:20:17,893 - 2025-03-12 22:20:17 | Topic: topic2 | Realm: default
+{
+  "args": [],
+  "kwargs": {
+    "EP": {
+      "common": {
+        "palabra1": {
+          "campo1": "valor1",
+          "campo2": "valor2",
+          "detalles": {
+            "subcampo1": "dato1",
+            "subcampo2": 123,
+            "subcampo3": [
+              "item1",
+              "item2",
+              "item3"
+            ]
+          }
+        },
+        "palabra3": {
+          "campo5": "valor5",
+          "campo6": "valor6",
+          "propiedades": {
+            "peso": 75.3,
+            "altura": 1.82,
+            "colores": [
+              "rojo",
+              "verde",
+              "azul"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:20:55,460 - 2025-03-12 22:20:55 | Topic: MsgEP | Realm: default
+{}
+
+2025-03-12 22:20:55,461 - 2025-03-12 22:20:55 | Topic: MsgEP | Realm: default2
+{}
+
+2025-03-12 22:20:55,461 - 2025-03-12 22:20:55 | Topic: MsgCrEnt | Realm: default
+{}
+
+2025-03-12 22:20:55,461 - 2025-03-12 22:20:55 | Topic: MsgCrEnt | Realm: default2
+{}
+
+2025-03-12 22:20:56,118 - 2025-03-12 22:20:56 | Topic: MsgEP | Realm: default2
+{}
+
+2025-03-12 22:20:56,119 - 2025-03-12 22:20:56 | Topic: MsgCrEnt | Realm: default
+{}
+
+2025-03-12 22:20:56,119 - 2025-03-12 22:20:56 | Topic: MsgEP | Realm: default
+{}
+
+2025-03-12 22:20:56,120 - 2025-03-12 22:20:56 | Topic: MsgCrEnt | Realm: default2
+{}
+
+2025-03-12 22:20:56,388 - 2025-03-12 22:20:56 | Topic: MsgCrEnt | Realm: default2
+{}
+
+2025-03-12 22:20:56,389 - 2025-03-12 22:20:56 | Topic: MsgEP | Realm: default
+{}
+
+2025-03-12 22:20:56,390 - 2025-03-12 22:20:56 | Topic: MsgCrEnt | Realm: default
+{}
+
+2025-03-12 22:20:56,391 - 2025-03-12 22:20:56 | Topic: MsgEP | Realm: default2
+{}
+
+2025-03-12 22:37:29,696 - 2025-03-12 22:37:29 | Topic: MsgEP | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:37:29,698 - 2025-03-12 22:37:29 | Topic: MsgCrEnt | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:37:31,694 - 2025-03-12 22:37:31 | Topic: MsgEP | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:37:31,695 - 2025-03-12 22:37:31 | Topic: MsgEP | Realm: default2
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:37:31,696 - 2025-03-12 22:37:31 | Topic: MsgCrEnt | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:37:31,698 - 2025-03-12 22:37:31 | Topic: MsgCrEnt | Realm: default2
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+

@@ -1,0 +1,210 @@
+2025-03-12 22:54:15,556 - 2025-03-12 22:54:15 | Topic: topic1 | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:54:15,560 - 2025-03-12 22:54:15 | Topic: topic2 | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:54:45,539 - 2025-03-12 22:54:45 | Topic: MsgEP | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:54:45,543 - 2025-03-12 22:54:45 | Topic: MsgCrEnt | Realm: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:54:45,544 - 2025-03-12 22:54:45 | Topic: MsgCrEnt | Realm: default
+{
+  "args": [],
+  "kwargs": {
+    "EP": {
+      "common": {
+        "palabra1": {
+          "campo1": "valor1",
+          "campo2": "valor2",
+          "detalles": {
+            "subcampo1": "dato1",
+            "subcampo2": 123,
+            "subcampo3": [
+              "item1",
+              "item2",
+              "item3"
+            ]
+          }
+        },
+        "palabra3": {
+          "campo5": "valor5",
+          "campo6": "valor6",
+          "propiedades": {
+            "peso": 75.3,
+            "altura": 1.82,
+            "colores": [
+              "rojo",
+              "verde",
+              "azul"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+
+2025-03-12 22:54:45,642 - 2025-03-12 22:54:45 | Topic: MsgCrEnt | Realm: default
+{
+  "args": [],
+  "kwargs": {
+    "EP": {
+      "common": {
+        "palabra1": {
+          "campo1": "valor1",
+          "campo2": "valor2",
+          "detalles": {
+            "subcampo1": "dato1",
+            "subcampo2": 123,
+            "subcampo3": [
+              "item1",
+              "item2",
+              "item3"
+            ]
+          }
+        },
+        "palabra3": {
+          "campo5": "valor5",
+          "campo6": "valor6",
+          "propiedades": {
+            "peso": 75.3,
+            "altura": 1.82,
+            "colores": [
+              "rojo",
+              "verde",
+              "azul"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+

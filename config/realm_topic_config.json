@@ -1,0 +1,13 @@
+{
+  "realms": {
+    "default": {
+      "router_url": "ws://127.0.0.1:60001",
+      "topics": ["MsgEP", "MsgCrEnt"]
+    },
+    "default2": {
+      "router_url": "ws://127.0.0.1:60002",
+      "topics": ["topic1", "topic2"]
+    }
+  }
+}
+

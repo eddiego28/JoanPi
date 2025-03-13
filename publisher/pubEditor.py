@@ -53,12 +53,6 @@ class PublisherEditorWidget(QWidget):
         btnLayout.addWidget(self.convertButton)
         mainLayout.addLayout(btnLayout)
 
-        # Configuración: solo el tiempo (opcional)
-        commonLayout = QHBoxLayout()
-        commonLayout.addWidget(QLabel("Tiempo (HH:MM:SS):"))
-        self.commonTimeEdit = QLineEdit("00:00:00")
-        commonLayout.addWidget(self.commonTimeEdit)
-        mainLayout.addLayout(commonLayout)
 
         # QTabWidget con dos pestañas: "JSON" y "Árbol"
         self.previewTabWidget = QTabWidget()

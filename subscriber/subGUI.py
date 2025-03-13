@@ -15,16 +15,16 @@ global_session_sub = None
 # -----------------------------------------------------------
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
-        # El constructor recibe solo 'config'
+        # El constructor recibe solo 'config' (como requiere Autobahn)
         super().__init__(config)
-        self.topics = []  # Se inyectan mediante la factoría
+        self.topics = []  # Se inyecta mediante la factoría
         self.on_message_callback = None
 
     async def onJoin(self, details):
-        realm_name = self.config.realm  # Se obtiene del config
+        realm_name = self.config.realm
         print(f"Suscriptor conectado en realm: {realm_name}")
-        # Suscribirse a cada topic; usar un parámetro por defecto en el lambda para capturar el valor actual
         for t in self.topics:
+            # Usar parámetro por defecto en lambda para capturar el valor actual de t
             await self.subscribe(
                 lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
                 t
@@ -61,7 +61,7 @@ def start_subscriber(url, realm, topics, on_message_callback):
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.messages = []  # Guarda los detalles completos
+        self.messages = []  # Guarda los detalles completos de cada mensaje
         self.initUI()
         
     def initUI(self):
@@ -89,8 +89,11 @@ class SubscriberMessageViewer(QWidget):
         row = item.row()
         if row < len(self.messages):
             data = self.messages[row]
+            # Convertir dict a string si es necesario
             if isinstance(data, dict):
                 data = json.dumps(data, indent=2, ensure_ascii=False)
+            # Eliminar saltos de línea para mejor visualización en el diálogo
+            data = data.replace("\n", " ")
             dlg = JsonDetailDialog(data, self)
             dlg.exec_()
 
@@ -98,15 +101,15 @@ class SubscriberMessageViewer(QWidget):
 # Clase SubscriberTab: interfaz principal del suscriptor.
 # -----------------------------------------------------------
 class SubscriberTab(QWidget):
-    # Signal para actualizar el viewer en el hilo principal
+    # Signal para actualizar el viewer desde el hilo del suscriptor
     messageReceived = pyqtSignal(str, str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se carga desde config/realm_topic_config.json
-        self.selected_topics_by_realm = {}  # Persistencia de selección de topics por realm
+        self.realms_topics = {}  # Se carga desde realm_topic_config.json
+        self.selected_topics_by_realm = {}  # Para mantener la selección persistente de topics por realm
         self.current_realm = None
-        # Conectar el signal directamente aquí
+        # Conectar el signal directamente en el constructor (evita duplicados)
         self.messageReceived.connect(self.onMessageReceived)
         self.initUI()
         self.loadGlobalRealmTopicConfig()
@@ -142,7 +145,6 @@ class SubscriberTab(QWidget):
         self.topicTable = QTableWidget(0, 1)
         self.topicTable.setHorizontalHeaderLabels(["Topic"])
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        # Conectar para guardar cambios en la selección de topics
         self.topicTable.itemChanged.connect(self.onTopicItemChanged)
         leftLayout.addWidget(self.topicTable)
         
@@ -169,7 +171,7 @@ class SubscriberTab(QWidget):
         
         mainLayout.addLayout(leftLayout, stretch=1)
         
-        # Lado derecho: Viewer de mensajes (tabla de logs)
+        # Lado derecho: Viewer de mensajes
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         
@@ -181,7 +183,6 @@ class SubscriberTab(QWidget):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                # Si el JSON es una lista, convertirlo a dict
                 if isinstance(data, list):
                     realms_dict = {}
                     for item in data:
@@ -298,7 +299,7 @@ class SubscriberTab(QWidget):
             self.topicTable.removeRow(row)
 
     def startSubscription(self):
-        # Para cada realm marcado, usa la selección persistente almacenada
+        # Para cada realm marcado, se recogen los topics guardados en la selección persistente.
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
             url_item = self.realmTable.item(row, 1)
@@ -317,7 +318,6 @@ class SubscriberTab(QWidget):
         # Este método se llama desde el hilo del suscriptor.
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         details = json.dumps(content, indent=2, ensure_ascii=False)
-        # Emitir la señal para actualizar la UI
         self.messageReceived.emit(realm, topic, timestamp, details)
         print(f"Mensaje recibido en realm '{realm}', topic '{topic}' a las {timestamp}")
         sys.stdout.flush()
@@ -331,16 +331,7 @@ class SubscriberTab(QWidget):
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementa carga de proyecto si es necesario.
+        # Implementar carga de proyecto si es necesario.
         pass
-
-    def showEvent(self, event):
-        # Conectar signal si es necesario
-        self.messageReceived.connect(self.onMessageReceived)
-        super().showEvent(event)
-
-    def hideEvent(self, event):
-        self.messageReceived.disconnect(self.onMessageReceived)
-        super().hideEvent(event)
 
 # Fin de SubscriberTab

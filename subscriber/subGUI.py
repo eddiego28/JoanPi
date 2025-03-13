@@ -2,7 +2,8 @@
 import os, json, datetime, asyncio, threading, sys
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog, QDialog, QTreeWidget
+    QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
+    QDialog, QTreeWidget, QPlainTextEdit
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -22,8 +23,8 @@ class MultiTopicSubscriber(ApplicationSession):
     async def onJoin(self, details):
         realm_name = self.config.realm
         print(f"Suscriptor conectado en realm: {realm_name}")
+        # Suscribirse a cada topic; usamos lambda con parámetro por defecto para capturar t
         for t in self.topics:
-            # Usamos lambda con parámetro por defecto para capturar el valor actual de t
             await self.subscribe(
                 lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
                 t
@@ -55,7 +56,7 @@ def start_subscriber(url, realm, topics, on_message_callback):
     threading.Thread(target=run, daemon=True).start()
 
 # -----------------------------------------------------------
-# Clase JsonTreeDialog: muestra el JSON en formato de árbol jerárquico en UNA sola columna.
+# Clase JsonTreeDialog: muestra el JSON en formato de árbol (1 sola columna).
 # -----------------------------------------------------------
 from PyQt5.QtWidgets import QTreeWidgetItem
 class JsonTreeDialog(QDialog):
@@ -71,11 +72,12 @@ class JsonTreeDialog(QDialog):
         layout.addWidget(self.tree)
         self.setLayout(layout)
         self.buildTree(json_data, self.tree.invisibleRootItem())
-        self.tree.expandAll()
+        self.tree.expandAll()  # Expande todo el árbol
 
     def buildTree(self, data, parent):
         if isinstance(data, dict):
             for key, value in data.items():
+                # Construir una línea con la clave y, si es primitivo, el valor
                 if isinstance(value, (dict, list)):
                     text = f"{key}:"
                 else:
@@ -130,12 +132,9 @@ class SubscriberMessageViewer(QWidget):
         row = item.row()
         if row < len(self.messages):
             data = self.messages[row]
-            if isinstance(data, dict):
-                dlg = JsonTreeDialog(data, self)
-                dlg.exec_()
-            else:
-                dlg = JsonDetailDialog(data, self)
-                dlg.exec_()
+            # Mostrar el JSON en formato árbol con una sola columna (vertical)
+            dlg = JsonTreeDialog(data, self)
+            dlg.exec_()
 
 # -----------------------------------------------------------
 # Clase SubscriberTab: interfaz principal del suscriptor.
@@ -146,11 +145,10 @@ class SubscriberTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se carga desde un JSON (por ejemplo, realm_topic_config.json)
-        self.selected_topics_by_realm = {}  # Mantiene la selección de topics por realm
+        self.realms_topics = {}  # Se carga desde el JSON de configuración
+        self.selected_topics_by_realm = {}  # Persistencia de selección de topics por realm
         self.current_realm = None
-        # Conectar el signal solo en el constructor
-        self.messageReceived.connect(self.onMessageReceived)
+        self.messageReceived.connect(self.onMessageReceived)  # Conectar solo una vez
         self.initUI()
         self.loadGlobalRealmTopicConfig()
 
@@ -159,14 +157,13 @@ class SubscriberTab(QWidget):
         
         # Panel izquierdo: Realms y Topics
         leftLayout = QVBoxLayout()
-        
         lblRealms = QLabel("Realms (checkbox) + Router URL:")
         leftLayout.addWidget(lblRealms)
         self.realmTable = QTableWidget(0, 2)
         self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
         self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.realmTable.cellClicked.connect(self.onRealmClicked)
-        self.realmTable.itemChanged.connect(self.onRealmItemChanged)
+        # Nota: No conectamos itemChanged para realmTable para evitar cambios automáticos.
         leftLayout.addWidget(self.realmTable)
         
         realmBtnLayout = QHBoxLayout()
@@ -250,7 +247,7 @@ class SubscriberTab(QWidget):
             self.realmTable.insertRow(row)
             itemRealm = QTableWidgetItem(realm)
             itemRealm.setFlags(itemRealm.flags() | Qt.ItemIsUserCheckable)
-            # Iniciar desmarcado
+            # Iniciar desmarcado (el usuario debe marcar manualmente)
             itemRealm.setCheckState(Qt.Unchecked)
             self.realmTable.setItem(row, 0, itemRealm)
             router_url = info.get("router_url", "ws://127.0.0.1:60001/ws")
@@ -265,43 +262,23 @@ class SubscriberTab(QWidget):
         if realm_item:
             realm = realm_item.text().strip()
             self.current_realm = realm
+            # Si no existe selección previa para este realm, inicializar con un conjunto vacío
             if realm not in self.selected_topics_by_realm:
-                topics = set(self.realms_topics.get(realm, {}).get("topics", []))
-                # Iniciar los topics como desmarcados por defecto
                 self.selected_topics_by_realm[realm] = set()
             self.populateTopicTable(realm)
-
-    def onRealmItemChanged(self, item):
-        if item.column() != 0:
-            return
-        realm = item.text().strip()
-        if self.current_realm == realm:
-            if item.checkState() == Qt.Checked:
-                # Marcar todos los topics de la tabla
-                for row in range(self.topicTable.rowCount()):
-                    self.topicTable.item(row, 0).setCheckState(Qt.Checked)
-                self.selected_topics_by_realm[realm] = set(self.realms_topics.get(realm, {}).get("topics", []))
-            else:
-                for row in range(self.topicTable.rowCount()):
-                    self.topicTable.item(row, 0).setCheckState(Qt.Unchecked)
-                self.selected_topics_by_realm[realm] = set()
-        else:
-            if item.checkState() == Qt.Checked:
-                self.selected_topics_by_realm[realm] = set(self.realms_topics.get(realm, {}).get("topics", []))
-            else:
-                self.selected_topics_by_realm[realm] = set()
 
     def populateTopicTable(self, realm):
         self.topicTable.blockSignals(True)
         self.topicTable.setRowCount(0)
         topics = self.realms_topics.get(realm, {}).get("topics", [])
-        # Iniciar todos desmarcados
+        selected = self.selected_topics_by_realm.get(realm, set())
         for t in topics:
             row = self.topicTable.rowCount()
             self.topicTable.insertRow(row)
             t_item = QTableWidgetItem(t)
             t_item.setFlags(t_item.flags() | Qt.ItemIsUserCheckable)
-            t_item.setCheckState(Qt.Unchecked)
+            # Usar la selección persistente: si el topic está en el conjunto, marcarlo; de lo contrario, desmarcado.
+            t_item.setCheckState(Qt.Checked if t in selected else Qt.Unchecked)
             self.topicTable.setItem(row, 0, t_item)
         self.topicTable.blockSignals(False)
 
@@ -324,7 +301,7 @@ class SubscriberTab(QWidget):
             self.realmTable.insertRow(row)
             itemRealm = QTableWidgetItem(new_realm)
             itemRealm.setFlags(itemRealm.flags() | Qt.ItemIsUserCheckable)
-            itemRealm.setCheckState(Qt.Checked)
+            itemRealm.setCheckState(Qt.Unchecked)
             self.realmTable.setItem(row, 0, itemRealm)
             self.realmTable.setItem(row, 1, QTableWidgetItem("ws://127.0.0.1:60001/ws"))
             self.newRealmEdit.clear()
@@ -345,6 +322,7 @@ class SubscriberTab(QWidget):
             self.topicTable.insertRow(row)
             t_item = QTableWidgetItem(new_topic)
             t_item.setFlags(t_item.flags() | Qt.ItemIsUserCheckable)
+            # Iniciar desmarcado por defecto (el usuario debe marcar manualmente)
             t_item.setCheckState(Qt.Unchecked)
             self.topicTable.setItem(row, 0, t_item)
             if self.current_realm:
@@ -393,9 +371,8 @@ class SubscriberTab(QWidget):
         # Este método se llama desde el hilo del suscriptor.
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         details = json.dumps(content, indent=2, ensure_ascii=False)
-        # Emitir la señal para actualizar el viewer (una sola conexión)
         self.messageReceived.emit(realm, topic, timestamp, details)
-        # Llamar a la función de log para registrar el mensaje en el fichero de log
+        # Llamar a log_to_file para registrar el mensaje en el log (en la carpeta logs)
         log_to_file(timestamp, realm, topic, details)
         print(f"Mensaje recibido en realm '{realm}', topic '{topic}' a las {timestamp}")
         sys.stdout.flush()
@@ -409,6 +386,16 @@ class SubscriberTab(QWidget):
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
+        # Implementa la carga de proyecto si es necesario.
         pass
+
+    def showEvent(self, event):
+        # Conectar signal si es necesario (aunque ya se conecta en el constructor)
+        self.messageReceived.connect(self.onMessageReceived)
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        self.messageReceived.disconnect(self.onMessageReceived)
+        super().hideEvent(event)
 
 # Fin de SubscriberTab

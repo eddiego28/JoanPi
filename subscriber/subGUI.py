@@ -291,13 +291,13 @@ class SubscriberTab(QWidget):
     def onTopicItemChanged(self, item):
         if not self.current_realm:
             return
-        # Se recorre la tabla para obtener el estado actual de todos los topics
         selected = set()
         for row in range(self.topicTable.rowCount()):
             t_item = self.topicTable.item(row, 0)
             if t_item and t_item.checkState() == Qt.Checked:
                 selected.add(t_item.text().strip())
         self.selected_topics_by_realm[self.current_realm] = selected
+
 
 
     def addRealmRow(self):

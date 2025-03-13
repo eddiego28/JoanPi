@@ -2,7 +2,7 @@
 import os, json, datetime, asyncio, threading, sys
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog, QDialog, QPlainTextEdit
+    QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog, QDialog, QTreeWidget
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -55,24 +55,46 @@ def start_subscriber(url, realm, topics, on_message_callback):
     threading.Thread(target=run, daemon=True).start()
 
 # -----------------------------------------------------------
-# Clase JsonSingleColumnDialog: muestra el JSON formateado en un QTextEdit de una sola columna.
+# Clase JsonTreeDialog: muestra el JSON en formato de árbol jerárquico en UNA sola columna.
 # -----------------------------------------------------------
-class JsonSingleColumnDialog(QDialog):
+from PyQt5.QtWidgets import QTreeWidgetItem
+class JsonTreeDialog(QDialog):
     def __init__(self, json_data, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Detalle JSON")
+        self.setWindowTitle("Detalle JSON - Árbol")
         self.resize(600, 400)
         layout = QVBoxLayout(self)
-        self.textEdit = QPlainTextEdit(self)
-        self.textEdit.setReadOnly(True)
-        # Convertir json_data a string formateado
-        if isinstance(json_data, (dict, list)):
-            json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
-        else:
-            json_str = str(json_data)
-        self.textEdit.setPlainText(json_str)
-        layout.addWidget(self.textEdit)
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(1)
+        self.tree.setHeaderLabels(["JSON"])
+        self.tree.header().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.tree)
         self.setLayout(layout)
+        self.buildTree(json_data, self.tree.invisibleRootItem())
+        self.tree.expandAll()
+
+    def buildTree(self, data, parent):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, (dict, list)):
+                    text = f"{key}:"
+                else:
+                    text = f"{key}: {value}"
+                item = QTreeWidgetItem([text])
+                parent.addChild(item)
+                self.buildTree(value, item)
+        elif isinstance(data, list):
+            for index, value in enumerate(data):
+                if isinstance(value, (dict, list)):
+                    text = f"[{index}]:"
+                else:
+                    text = f"[{index}]: {value}"
+                item = QTreeWidgetItem([text])
+                parent.addChild(item)
+                self.buildTree(value, item)
+        else:
+            item = QTreeWidgetItem([str(data)])
+            parent.addChild(item)
 
 # -----------------------------------------------------------
 # Clase SubscriberMessageViewer: muestra los mensajes recibidos en una tabla.
@@ -92,7 +114,6 @@ class SubscriberMessageViewer(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        # Al hacer doble clic se muestra el detalle en el dialogo de una sola columna
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
@@ -109,8 +130,12 @@ class SubscriberMessageViewer(QWidget):
         row = item.row()
         if row < len(self.messages):
             data = self.messages[row]
-            dlg = JsonSingleColumnDialog(data, self)
-            dlg.exec_()
+            if isinstance(data, dict):
+                dlg = JsonTreeDialog(data, self)
+                dlg.exec_()
+            else:
+                dlg = JsonDetailDialog(data, self)
+                dlg.exec_()
 
 # -----------------------------------------------------------
 # Clase SubscriberTab: interfaz principal del suscriptor.
@@ -121,10 +146,10 @@ class SubscriberTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se carga desde el JSON de configuración
-        self.selected_topics_by_realm = {}  # Para mantener la selección de topics por realm
+        self.realms_topics = {}  # Se carga desde un JSON (por ejemplo, realm_topic_config.json)
+        self.selected_topics_by_realm = {}  # Mantiene la selección de topics por realm
         self.current_realm = None
-        # Conectar el signal en el constructor
+        # Conectar el signal solo en el constructor
         self.messageReceived.connect(self.onMessageReceived)
         self.initUI()
         self.loadGlobalRealmTopicConfig()
@@ -187,7 +212,7 @@ class SubscriberTab(QWidget):
         
         mainLayout.addLayout(leftLayout, stretch=1)
         
-        # Panel derecho: Viewer de mensajes
+        # Panel derecho: Viewer de mensajes (logs)
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         
@@ -242,18 +267,17 @@ class SubscriberTab(QWidget):
             self.current_realm = realm
             if realm not in self.selected_topics_by_realm:
                 topics = set(self.realms_topics.get(realm, {}).get("topics", []))
-                # Por defecto, queremos que los topics inicien desmarcados:
-                self.selected_topics_by_realm[realm] = set()  
+                # Iniciar los topics como desmarcados por defecto
+                self.selected_topics_by_realm[realm] = set()
             self.populateTopicTable(realm)
 
     def onRealmItemChanged(self, item):
         if item.column() != 0:
             return
         realm = item.text().strip()
-        # Si se marca el realm, se pueden activar manualmente los topics; si se desmarca, se desactivan
         if self.current_realm == realm:
             if item.checkState() == Qt.Checked:
-                # Marcar todos los topics de la selección persistente
+                # Marcar todos los topics de la tabla
                 for row in range(self.topicTable.rowCount()):
                     self.topicTable.item(row, 0).setCheckState(Qt.Checked)
                 self.selected_topics_by_realm[realm] = set(self.realms_topics.get(realm, {}).get("topics", []))
@@ -271,7 +295,7 @@ class SubscriberTab(QWidget):
         self.topicTable.blockSignals(True)
         self.topicTable.setRowCount(0)
         topics = self.realms_topics.get(realm, {}).get("topics", [])
-        # Queremos que inicien desmarcados, sin importar la selección persistente (se actualiza según usuario)
+        # Iniciar todos desmarcados
         for t in topics:
             row = self.topicTable.rowCount()
             self.topicTable.insertRow(row)
@@ -340,7 +364,7 @@ class SubscriberTab(QWidget):
             self.topicTable.removeRow(row)
 
     def startSubscription(self):
-        # Para cada realm marcado, se recogen los topics de la selección persistente.
+        # Para cada realm marcado, se usan los topics guardados en la selección persistente.
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
             url_item = self.realmTable.item(row, 1)
@@ -350,7 +374,7 @@ class SubscriberTab(QWidget):
                 selected_topics = list(self.selected_topics_by_realm.get(realm, []))
                 if selected_topics:
                     start_subscriber(router_url, realm, selected_topics, self.handleMessage)
-                    # Registrar la suscripción en el viewer en formato JSON con indentación y saltos de línea
+                    # Registrar la suscripción en el viewer en formato JSON
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     subscription_info = {
                         "action": "subscribe",
@@ -369,7 +393,10 @@ class SubscriberTab(QWidget):
         # Este método se llama desde el hilo del suscriptor.
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         details = json.dumps(content, indent=2, ensure_ascii=False)
+        # Emitir la señal para actualizar el viewer (una sola conexión)
         self.messageReceived.emit(realm, topic, timestamp, details)
+        # Llamar a la función de log para registrar el mensaje en el fichero de log
+        log_to_file(timestamp, realm, topic, details)
         print(f"Mensaje recibido en realm '{realm}', topic '{topic}' a las {timestamp}")
         sys.stdout.flush()
 
@@ -382,15 +409,6 @@ class SubscriberTab(QWidget):
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementa la carga de proyecto si es necesario.
         pass
-
-    def showEvent(self, event):
-        self.messageReceived.connect(self.onMessageReceived)
-        super().showEvent(event)
-
-    def hideEvent(self, event):
-        self.messageReceived.disconnect(self.onMessageReceived)
-        super().hideEvent(event)
 
 # Fin de SubscriberTab

@@ -15,16 +15,18 @@ global_session_sub = None
 # -----------------------------------------------------------
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
+        # El constructor recibe solo 'config'
         super().__init__(config)
-        self.topics = []  # Se inyecta mediante la factoría
+        self.topics = []  # Se inyectan mediante la factoría
         self.on_message_callback = None
 
     async def onJoin(self, details):
-        realm_name = self.config.realm
+        realm_name = self.config.realm  # Se obtiene del config
         print(f"Suscriptor conectado en realm: {realm_name}")
+        # Suscribirse a cada topic; usar un parámetro por defecto en el lambda para capturar el valor actual
         for t in self.topics:
             await self.subscribe(
-                lambda *args, **kwargs: self.on_event(realm_name, t, *args, **kwargs),
+                lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
                 t
             )
 
@@ -54,19 +56,19 @@ def start_subscriber(url, realm, topics, on_message_callback):
     threading.Thread(target=run, daemon=True).start()
 
 # -----------------------------------------------------------
-# Clase SubscriberMessageViewer: muestra los mensajes recibidos en una tabla.
+# Clase SubscriberMessageViewer: muestra los mensajes en una tabla.
 # -----------------------------------------------------------
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.messages = []  # Almacena los detalles completos de cada mensaje recibido
+        self.messages = []  # Guarda los detalles completos
         self.initUI()
         
     def initUI(self):
         layout = QVBoxLayout(self)
         self.table = QTableWidget()
         self.table.setColumnCount(3)
-        # Orden: Hora, Realm, Topic
+        # Columnas: Hora, Realm, Topic
         self.table.setHorizontalHeaderLabels(["Hora", "Realm", "Topic"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -96,15 +98,15 @@ class SubscriberMessageViewer(QWidget):
 # Clase SubscriberTab: interfaz principal del suscriptor.
 # -----------------------------------------------------------
 class SubscriberTab(QWidget):
-    # Signal para actualizar el viewer desde el hilo del suscriptor
+    # Signal para actualizar el viewer en el hilo principal
     messageReceived = pyqtSignal(str, str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se cargará desde realm_topic_config.json
-        self.selected_topics_by_realm = {}  # Para mantener la selección de topics por realm
+        self.realms_topics = {}  # Se carga desde config/realm_topic_config.json
+        self.selected_topics_by_realm = {}  # Persistencia de selección de topics por realm
         self.current_realm = None
-        # Conectar el signal directamente en el constructor
+        # Conectar el signal directamente aquí
         self.messageReceived.connect(self.onMessageReceived)
         self.initUI()
         self.loadGlobalRealmTopicConfig()
@@ -140,7 +142,7 @@ class SubscriberTab(QWidget):
         self.topicTable = QTableWidget(0, 1)
         self.topicTable.setHorizontalHeaderLabels(["Topic"])
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        # Conectar para actualizar la selección de topics
+        # Conectar para guardar cambios en la selección de topics
         self.topicTable.itemChanged.connect(self.onTopicItemChanged)
         leftLayout.addWidget(self.topicTable)
         
@@ -167,7 +169,7 @@ class SubscriberTab(QWidget):
         
         mainLayout.addLayout(leftLayout, stretch=1)
         
-        # Lado derecho: Viewer de mensajes
+        # Lado derecho: Viewer de mensajes (tabla de logs)
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         
@@ -179,6 +181,7 @@ class SubscriberTab(QWidget):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                # Si el JSON es una lista, convertirlo a dict
                 if isinstance(data, list):
                     realms_dict = {}
                     for item in data:
@@ -295,18 +298,14 @@ class SubscriberTab(QWidget):
             self.topicTable.removeRow(row)
 
     def startSubscription(self):
-        # Para cada realm marcado, recoge los topics marcados y suscríbete
+        # Para cada realm marcado, usa la selección persistente almacenada
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
             url_item = self.realmTable.item(row, 1)
             if realm_item and realm_item.checkState() == Qt.Checked:
                 realm = realm_item.text().strip()
                 router_url = url_item.text().strip() if url_item else "ws://127.0.0.1:60001/ws"
-                selected_topics = []
-                for t_row in range(self.topicTable.rowCount()):
-                    t_item = self.topicTable.item(t_row, 0)
-                    if t_item and t_item.checkState() == Qt.Checked:
-                        selected_topics.append(t_item.text().strip())
+                selected_topics = list(self.selected_topics_by_realm.get(realm, []))
                 if selected_topics:
                     start_subscriber(router_url, realm, selected_topics, self.handleMessage)
                     print(f"Suscrito a realm '{realm}' con topics {selected_topics}")
@@ -318,7 +317,7 @@ class SubscriberTab(QWidget):
         # Este método se llama desde el hilo del suscriptor.
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         details = json.dumps(content, indent=2, ensure_ascii=False)
-        # Emitir la señal para actualizar el viewer en el hilo principal.
+        # Emitir la señal para actualizar la UI
         self.messageReceived.emit(realm, topic, timestamp, details)
         print(f"Mensaje recibido en realm '{realm}', topic '{topic}' a las {timestamp}")
         sys.stdout.flush()
@@ -327,13 +326,21 @@ class SubscriberTab(QWidget):
     def onMessageReceived(self, realm, topic, timestamp, details):
         self.viewer.add_message(realm, topic, timestamp, details)
 
-    # Conectar el signal en el constructor ya lo hicimos.
     def resetLog(self):
         self.viewer.table.setRowCount(0)
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementa la carga de proyecto si es necesario.
+        # Implementa carga de proyecto si es necesario.
         pass
+
+    def showEvent(self, event):
+        # Conectar signal si es necesario
+        self.messageReceived.connect(self.onMessageReceived)
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        self.messageReceived.disconnect(self.onMessageReceived)
+        super().hideEvent(event)
 
 # Fin de SubscriberTab

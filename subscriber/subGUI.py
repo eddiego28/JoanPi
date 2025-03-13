@@ -15,15 +15,15 @@ global_session_sub = None
 # -----------------------------------------------------------
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
-        # Constructor que recibe solo config, como requiere Autobahn.
+        # El constructor recibe solo config (lo que pasa Autobahn)
         super().__init__(config)
-        self.topics = []  # Se inyectan desde la factoría
-        self.on_message_callback = None  # Se inyecta desde la factoría
+        self.topics = []
+        self.on_message_callback = None
 
     async def onJoin(self, details):
-        realm_name = self.config.realm  # Se obtiene del config
+        realm_name = self.config.realm  # Se obtiene del config de la sesión
         print(f"Suscriptor conectado en realm: {realm_name}")
-        # Suscribirse a cada topic de la lista inyectada
+        # Suscribirse a cada topic que tengamos inyectado
         for t in self.topics:
             await self.subscribe(
                 lambda *args, **kwargs: self.on_event(realm_name, t, *args, **kwargs),
@@ -31,17 +31,12 @@ class MultiTopicSubscriber(ApplicationSession):
             )
 
     def on_event(self, realm, topic, *args, **kwargs):
-        # Construye la data del mensaje y llama al callback inyectado
         message_data = {"args": args, "kwargs": kwargs}
         if self.on_message_callback:
             self.on_message_callback(realm, topic, message_data)
 
     @classmethod
     def factory(cls, topics, on_message_callback):
-        """
-        Factoría que recibe topics y callback, y devuelve una función
-        que crea la sesión a partir de config.
-        """
         def create_session(config):
             session = cls(config)
             session.topics = topics
@@ -61,12 +56,12 @@ def start_subscriber(url, realm, topics, on_message_callback):
     threading.Thread(target=run, daemon=True).start()
 
 # -----------------------------------------------------------
-# Clase SubscriberMessageViewer: muestra mensajes en una tabla.
+# Clase SubscriberMessageViewer: muestra los mensajes en una tabla.
 # -----------------------------------------------------------
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.messages = []  # Almacena los detalles de cada mensaje recibido
+        self.messages = []  # Guarda los detalles completos de cada mensaje
         self.initUI()
         
     def initUI(self):
@@ -78,7 +73,7 @@ class SubscriberMessageViewer(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        # Conectar doble clic para ver detalles del JSON
+        # Conectar doble clic para ver detalle del JSON
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
@@ -124,7 +119,6 @@ class SubscriberTab(QWidget):
         self.realmTable.cellClicked.connect(self.onRealmClicked)
         leftLayout.addWidget(self.realmTable)
         
-        # Botones para agregar/borrar realms
         realmBtnLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("Nuevo Realm")
@@ -144,7 +138,6 @@ class SubscriberTab(QWidget):
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         leftLayout.addWidget(self.topicTable)
         
-        # Botones para agregar/borrar topics
         topicBtnLayout = QHBoxLayout()
         self.newTopicEdit = QLineEdit()
         self.newTopicEdit.setPlaceholderText("Nuevo Topic")
@@ -157,7 +150,6 @@ class SubscriberTab(QWidget):
         topicBtnLayout.addWidget(self.btnDelTopic)
         leftLayout.addLayout(topicBtnLayout)
         
-        # Botones de control: Suscribirse y Resetear log
         ctrlLayout = QHBoxLayout()
         self.btnSubscribe = QPushButton("Suscribirse")
         self.btnSubscribe.clicked.connect(self.startSubscription)
@@ -181,7 +173,7 @@ class SubscriberTab(QWidget):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                # Si el JSON es una lista, convertirlo a dict:
+                # Si el JSON es una lista, convertirla a diccionario:
                 if isinstance(data, list):
                     realms_dict = {}
                     for item in data:
@@ -271,7 +263,7 @@ class SubscriberTab(QWidget):
             self.topicTable.removeRow(row)
 
     def startSubscription(self):
-        # Recorre cada realm marcado
+        # Para cada realm marcado, recoge los topics marcados y suscríbete
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
             url_item = self.realmTable.item(row, 1)
@@ -279,13 +271,14 @@ class SubscriberTab(QWidget):
                 realm = realm_item.text().strip()
                 router_url = url_item.text().strip() if url_item else "ws://127.0.0.1:60001/ws"
                 selected_topics = []
-                # Recorre la tabla de topics (se muestran según el realm seleccionado)
+                # Recorre la tabla de topics (la misma para todos los realms mostrados)
                 for t_row in range(self.topicTable.rowCount()):
                     t_item = self.topicTable.item(t_row, 0)
                     if t_item and t_item.checkState() == Qt.Checked:
                         selected_topics.append(t_item.text().strip())
                 if selected_topics:
                     start_subscriber(router_url, realm, selected_topics, self.onMessageArrived)
+                    print(f"Suscrito a realm '{realm}' con topics {selected_topics}")
                 else:
                     QMessageBox.warning(self, "Advertencia", f"No hay topics seleccionados para realm {realm}.")
 
@@ -294,13 +287,14 @@ class SubscriberTab(QWidget):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         details = json.dumps(content, indent=2, ensure_ascii=False)
         self.viewer.add_message(realm, topic, timestamp, details)
+        print(f"Mensaje recibido en realm '{realm}', topic '{topic}' a las {timestamp}")
 
     def resetLog(self):
         self.viewer.table.setRowCount(0)
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Aquí podrías implementar la carga de un proyecto, si es necesario.
+        # Implementar carga de proyecto si es necesario
         pass
 
 # Fin de SubscriberTab

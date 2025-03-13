@@ -2,17 +2,43 @@
 import os, json, datetime, logging
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QFileDialog, QMessageBox, QTreeWidget, QTreeWidgetItem
 
-# Configuración básica de logging
-LOG_FILENAME = f"log_{datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')}.txt"
-file_logger = logging.getLogger("FileLogger")
-file_logger.setLevel(logging.INFO)
-fh = logging.FileHandler(LOG_FILENAME, encoding="utf-8")
-fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-file_logger.addHandler(fh)
+import os
+import datetime
+import logging
 
-def log_to_file(time_str, topic, realm, message_json):
-    entry = f"{time_str} | Topic: {topic} | Realm: {realm}\n{message_json}\n"
-    file_logger.info(entry)
+# Obtener la ruta del directorio actual (donde se encuentra este archivo utils.py)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Definir el directorio de logs: se creará en la raíz del proyecto en una carpeta llamada "logs"
+LOG_DIR = os.path.join(BASE_DIR, "..", "logs")
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+
+# Crear un nombre para el fichero de log basado en la fecha y hora actuales
+LOG_FILENAME = os.path.join(LOG_DIR, f"log_{datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')}.txt")
+
+# Configurar el logger
+logger = logging.getLogger("FileLogger")
+logger.setLevel(logging.INFO)
+
+# Crear un FileHandler para escribir en el archivo de log, usando UTF-8
+file_handler = logging.FileHandler(LOG_FILENAME, encoding="utf-8")
+formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+def log_to_file(time_str, realm, topic, message_json):
+    """
+    Escribe una entrada en el log con el siguiente formato:
+    
+    [time_str] | Realm: [realm] | Topic: [topic]
+    [message_json formateado]
+    
+    Se añade una línea en blanco al final para separar entradas.
+    """
+    entry = f"{time_str} | Realm: {realm} | Topic: {topic}\n{message_json}\n\n"
+    logger.info(entry)
+
 
 class JsonDetailDialog(QDialog):
     """

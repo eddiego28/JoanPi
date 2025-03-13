@@ -291,12 +291,14 @@ class SubscriberTab(QWidget):
     def onTopicItemChanged(self, item):
         if not self.current_realm:
             return
-        realm = self.current_realm
-        topic = item.text().strip()
-        # Si se marca, se añade al conjunto. Si se desmarca, NO se elimina (acumulación)
-        if item.checkState() == Qt.Checked:
-            self.selected_topics_by_realm.setdefault(realm, set()).add(topic)
-        # Si se desmarca, no se elimina para mantener la acumulación
+        # Se recorre la tabla para obtener el estado actual de todos los topics
+        selected = set()
+        for row in range(self.topicTable.rowCount()):
+            t_item = self.topicTable.item(row, 0)
+            if t_item and t_item.checkState() == Qt.Checked:
+                selected.add(t_item.text().strip())
+        self.selected_topics_by_realm[self.current_realm] = selected
+
 
     def addRealmRow(self):
         new_realm = self.newRealmEdit.text().strip()

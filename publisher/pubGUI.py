@@ -190,7 +190,7 @@ class PublisherTab(QWidget):
     def publishAll(self):
         # Obtiene la configuración de cada mensaje (realms, topics, contenido, etc.)
         for widget in self.msgWidgets:
-            cfg = widget.getConfig()  # Esto devuelve un dict con "realms", "topics", etc.
+            cfg = widget.getConfig()  # Esto devuelve un dict con "realms", "topics", etc. EEE
             realms = cfg.get("realms", [])
             topics = cfg.get("topics", [])
             content = cfg.get("content", {})

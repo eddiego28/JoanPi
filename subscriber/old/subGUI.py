@@ -77,7 +77,7 @@ class MessageViewer(QWidget):
             dlg = JsonDetailDialog(self.messages[row], self)
             dlg.exec_()
 
-# Clase SubscriberTab: usa un QComboBox para realms y un QListWidget para tópicos
+# Clase SubscriberTab: usa un QComboBox para realms y un QListWidget para tópicosSS
 class SubscriberTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)

@@ -269,7 +269,7 @@ class SubscriberTab(QWidget):
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementar carga de proyecto si es necesario
+        # Implementar carga de proyecto si es necesarioJ
         pass
 
 # Fin de SubscriberTab

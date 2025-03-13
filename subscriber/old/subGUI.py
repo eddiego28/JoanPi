@@ -1,161 +1,212 @@
 # subscriber/subGUI.py
-import sys, os, json, datetime, logging, asyncio, threading
+import os, json, datetime, asyncio, threading, sys
 from PyQt5.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton, 
-    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog,
-    QListWidget, QAbstractItemView, QComboBox
+    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
+    QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog, QDialog, QTreeWidget
 )
-from PyQt5.QtCore import Qt, pyqtSlot, QMetaObject, Q_ARG
+from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 
 global_session_sub = None
-global_loop_sub = None
 
+# -----------------------------------------------------------
+# Clase MultiTopicSubscriber: sesión WAMP para suscripción
+# -----------------------------------------------------------
 class MultiTopicSubscriber(ApplicationSession):
-    def __init__(self, config, topics, on_message_callback):
+    def __init__(self, config):
         super().__init__(config)
-        self.topics = topics
-        self.on_message_callback = on_message_callback
+        self.topics = []  # Se inyecta mediante la factoría
+        self.on_message_callback = None
 
     async def onJoin(self, details):
-        print("Conexión establecida en el subscriptor (realm:", self.config.realm, ")")
-        def make_callback(t):
-            return lambda *args, **kwargs: self.on_event(t, *args, **kwargs)
-        for topic in self.topics:
-            self.subscribe(make_callback(topic), topic)
+        realm_name = self.config.realm
+        print(f"Suscriptor conectado en realm: {realm_name}")
+        # Suscribirse a cada topic; usamos lambda con parámetro por defecto para capturar t
+        for t in self.topics:
+            await self.subscribe(
+                lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
+                t
+            )
 
-    def on_event(self, topic, *args, **kwargs):
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    def on_event(self, realm, topic, *args, **kwargs):
         message_data = {"args": args, "kwargs": kwargs}
-        message_json = json.dumps(message_data, indent=2, ensure_ascii=False)
-        log_to_file(timestamp, topic, self.config.realm, message_json)
-        logging.info(f"Recibido: {timestamp} | Topic: {topic} | Realm: {self.config.realm}")
         if self.on_message_callback:
-            self.on_message_callback(topic, message_data)
+            self.on_message_callback(realm, topic, message_data)
 
+    @classmethod
+    def factory(cls, topics, on_message_callback):
+        def create_session(config):
+            session = cls(config)
+            session.topics = topics
+            session.on_message_callback = on_message_callback
+            return session
+        return create_session
+
+# -----------------------------------------------------------
+# Función start_subscriber: inicia la sesión en un hilo separado.
+# -----------------------------------------------------------
 def start_subscriber(url, realm, topics, on_message_callback):
     def run():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         runner = ApplicationRunner(url=url, realm=realm)
-        runner.run(lambda config: MultiTopicSubscriber(config, topics, on_message_callback))
+        runner.run(MultiTopicSubscriber.factory(topics, on_message_callback))
     threading.Thread(target=run, daemon=True).start()
 
-# Clase para visualizar los mensajes recibidos
-class MessageViewer(QWidget):
+# -----------------------------------------------------------
+# Clase JsonTreeDialog: muestra el JSON en formato árbol.
+# -----------------------------------------------------------
+class JsonTreeDialog(QDialog):
+    def __init__(self, json_data, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Detalle JSON - Árbol")
+        self.resize(600, 400)
+        layout = QVBoxLayout(self)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Clave", "Valor"])
+        self.tree.header().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.tree)
+        self.setLayout(layout)
+        self.buildTree(json_data, self.tree.invisibleRootItem())
+
+    def buildTree(self, data, parent):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                item = QTreeWidgetItem([str(key), ""])
+                parent.addChild(item)
+                self.buildTree(value, item)
+        elif isinstance(data, list):
+            for index, value in enumerate(data):
+                item = QTreeWidgetItem([f"[{index}]", ""])
+                parent.addChild(item)
+                self.buildTree(value, item)
+        else:
+            item = QTreeWidgetItem(["", str(data)])
+            parent.addChild(item)
+
+# -----------------------------------------------------------
+# Clase SubscriberMessageViewer: muestra los mensajes recibidos.
+# -----------------------------------------------------------
+class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.messages = []
+        self.messages = []  # Guarda el JSON completo de cada mensaje
         self.initUI()
         
     def initUI(self):
         layout = QVBoxLayout(self)
-        self.viewerLabel = QLabel("Mensajes recibidos:")
-        layout.addWidget(self.viewerLabel)
-        self.messageTable = QTableWidget()
-        self.messageTable.setColumnCount(3)
-        self.messageTable.setHorizontalHeaderLabels(["Hora", "Topic", "Realm"])
-        self.messageTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.messageTable.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.messageTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.messageTable.itemDoubleClicked.connect(self.showDetails)
-        layout.addWidget(self.messageTable)
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        # Columnas: Hora, Realm, Topic
+        self.table.setHorizontalHeaderLabels(["Hora", "Realm", "Topic"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        # Doble clic: se muestra el JSON en formato árbol
+        self.table.itemDoubleClicked.connect(self.showDetails)
+        layout.addWidget(self.table)
         self.setLayout(layout)
-
+        
     def add_message(self, realm, topic, timestamp, details):
-        row = self.messageTable.rowCount()
-        self.messageTable.insertRow(row)
-        self.messageTable.setItem(row, 0, QTableWidgetItem(timestamp))
-        self.messageTable.setItem(row, 1, QTableWidgetItem(topic))
-        self.messageTable.setItem(row, 2, QTableWidgetItem(realm))
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        self.table.setItem(row, 0, QTableWidgetItem(timestamp))
+        self.table.setItem(row, 1, QTableWidgetItem(realm))
+        self.table.setItem(row, 2, QTableWidgetItem(topic))
         self.messages.append(details)
-
+        
     def showDetails(self, item):
         row = item.row()
         if row < len(self.messages):
-            dlg = JsonDetailDialog(self.messages[row], self)
-            dlg.exec_()
+            data = self.messages[row]
+            if isinstance(data, dict):
+                dlg = JsonTreeDialog(data, self)
+                dlg.exec_()
+            else:
+                dlg = JsonDetailDialog(data, self)
+                dlg.exec_()
 
-# Clase SubscriberTab: usa un QComboBox para realms y un QListWidget para tópicosSS
+# -----------------------------------------------------------
+# Clase SubscriberTab: interfaz principal del suscriptor.
+# -----------------------------------------------------------
 class SubscriberTab(QWidget):
+    # Signal para actualizar el viewer en el hilo principal
+    messageReceived = pyqtSignal(str, str, str, str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se cargará desde config/realm_topic_config.json
+        self.realms_topics = {}  # Se carga desde config/realm_topic_config.json
+        self.selected_topics_by_realm = {}  # Para mantener la selección de topics por realm
+        self.current_realm = None
+        # Conectar el signal una sola vez en el constructor
+        self.messageReceived.connect(self.onMessageReceived)
         self.initUI()
-        self.loadGlobalRealmTopicConfig()  # Ahora se llama después de initUI
+        self.loadGlobalRealmTopicConfig()
 
     def initUI(self):
         mainLayout = QHBoxLayout(self)
         
-        # Panel de configuración (izquierda)
-        configWidget = QWidget()
-        configLayout = QVBoxLayout(configWidget)
+        # Lado izquierdo: Panel de Realms y Topics
+        leftLayout = QVBoxLayout()
         
-        # Configuración de Realm (QComboBox)
-        realmLayout = QHBoxLayout()
-        realmLayout.addWidget(QLabel("Realm:"))
-        self.realmCombo = QComboBox()
-        self.realmCombo.addItems(["default"])
-        self.realmCombo.setMinimumWidth(200)
-        realmLayout.addWidget(self.realmCombo)
+        lblRealms = QLabel("Realms (checkbox) + Router URL:")
+        leftLayout.addWidget(lblRealms)
+        self.realmTable = QTableWidget(0, 2)
+        self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
+        self.realmTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.realmTable.cellClicked.connect(self.onRealmClicked)
+        # También conectar el cambio de estado para activar/desactivar topics
+        self.realmTable.itemChanged.connect(self.onRealmItemChanged)
+        leftLayout.addWidget(self.realmTable)
+        
+        realmBtnLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
-        self.newRealmEdit.setPlaceholderText("Nuevo realm")
-        realmLayout.addWidget(self.newRealmEdit)
-        self.addRealmButton = QPushButton("Agregar realm")
-        self.addRealmButton.clicked.connect(self.addRealm)
-        realmLayout.addWidget(self.addRealmButton)
-        configLayout.addLayout(realmLayout)
+        self.newRealmEdit.setPlaceholderText("Nuevo Realm")
+        self.btnAddRealm = QPushButton("Agregar Realm")
+        self.btnAddRealm.clicked.connect(self.addRealmRow)
+        self.btnDelRealm = QPushButton("Borrar Realm")
+        self.btnDelRealm.clicked.connect(self.deleteRealmRow)
+        realmBtnLayout.addWidget(self.newRealmEdit)
+        realmBtnLayout.addWidget(self.btnAddRealm)
+        realmBtnLayout.addWidget(self.btnDelRealm)
+        leftLayout.addLayout(realmBtnLayout)
         
-        # Configuración de Topics (QListWidget: topicsList)
-        topicsLayout = QHBoxLayout()
-        topicsLayout.addWidget(QLabel("Topics:"))
-        self.topicsList = QListWidget()
-        self.topicsList.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.topicsList.addItem("default")
-        topicsLayout.addWidget(self.topicsList)
-        btnLayout = QVBoxLayout()
+        lblTopics = QLabel("Topics (checkbox):")
+        leftLayout.addWidget(lblTopics)
+        self.topicTable = QTableWidget(0, 1)
+        self.topicTable.setHorizontalHeaderLabels(["Topic"])
+        self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.topicTable.itemChanged.connect(self.onTopicItemChanged)
+        leftLayout.addWidget(self.topicTable)
+        
+        topicBtnLayout = QHBoxLayout()
         self.newTopicEdit = QLineEdit()
-        self.newTopicEdit.setPlaceholderText("Nuevo tópico")
-        btnLayout.addWidget(self.newTopicEdit)
-        self.addTopicButton = QPushButton("Agregar")
-        self.addTopicButton.clicked.connect(self.addTopic)
-        btnLayout.addWidget(self.addTopicButton)
-        self.delTopicButton = QPushButton("Borrar")
-        self.delTopicButton.clicked.connect(self.deleteTopic)
-        btnLayout.addWidget(self.delTopicButton)
-        topicsLayout.addLayout(btnLayout)
-        configLayout.addLayout(topicsLayout)
+        self.newTopicEdit.setPlaceholderText("Nuevo Topic")
+        self.btnAddTopic = QPushButton("Agregar Topic")
+        self.btnAddTopic.clicked.connect(self.addTopicRow)
+        self.btnDelTopic = QPushButton("Borrar Topic")
+        self.btnDelTopic.clicked.connect(self.deleteTopicRow)
+        topicBtnLayout.addWidget(self.newTopicEdit)
+        topicBtnLayout.addWidget(self.btnAddTopic)
+        topicBtnLayout.addWidget(self.btnDelTopic)
+        leftLayout.addLayout(topicBtnLayout)
         
-        # Campo Router URL
-        routerLayout = QHBoxLayout()
-        routerLayout.addWidget(QLabel("Router URL:"))
-        self.urlEdit = QLineEdit("ws://127.0.0.1:60001/ws")
-        routerLayout.addWidget(self.urlEdit)
-        configLayout.addLayout(routerLayout)
+        ctrlLayout = QHBoxLayout()
+        self.btnSubscribe = QPushButton("Suscribirse")
+        self.btnSubscribe.clicked.connect(self.startSubscription)
+        ctrlLayout.addWidget(self.btnSubscribe)
+        self.btnReset = QPushButton("Reset Log")
+        self.btnReset.clicked.connect(self.resetLog)
+        ctrlLayout.addWidget(self.btnReset)
+        leftLayout.addLayout(ctrlLayout)
         
-        # Botones de suscripción
-        btnSubLayout = QHBoxLayout()
-        self.startButton = QPushButton("Iniciar Suscripción")
-        self.startButton.clicked.connect(self.startSubscription)
-        btnSubLayout.addWidget(self.startButton)
-        self.pauseButton = QPushButton("Pausar Suscripción")
-        self.pauseButton.clicked.connect(self.pauseSubscription)
-        btnSubLayout.addWidget(self.pauseButton)
-        self.resetLogButton = QPushButton("Resetear Log")
-        self.resetLogButton.clicked.connect(self.resetLog)
-        btnSubLayout.addWidget(self.resetLogButton)
-        configLayout.addLayout(btnSubLayout)
+        mainLayout.addLayout(leftLayout, stretch=1)
         
-        self.loadConfigButton = QPushButton("Cargar Configuración de Proyecto")
-        self.loadConfigButton.clicked.connect(self.loadProjectConfig)
-        configLayout.addWidget(self.loadConfigButton)
-        configLayout.addStretch()
-        mainLayout.addWidget(configWidget, 1)
+        # Lado derecho: Viewer de mensajes
+        self.viewer = SubscriberMessageViewer(self)
+        mainLayout.addWidget(self.viewer, stretch=2)
         
-        # Panel de mensajes (derecha)
-        self.viewer = MessageViewer(self)
-        mainLayout.addWidget(self.viewer, 2)
         self.setLayout(mainLayout)
 
     def loadGlobalRealmTopicConfig(self):
@@ -164,130 +215,183 @@ class SubscriberTab(QWidget):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                if isinstance(data, list):
+                    realms_dict = {}
+                    for item in data:
+                        realm = item.get("realm")
+                        if realm:
+                            realms_dict[realm] = {
+                                "router_url": item.get("router_url", "ws://127.0.0.1:60001/ws"),
+                                "topics": item.get("topics", [])
+                            }
+                    data = {"realms": realms_dict}
                 self.realms_topics = data.get("realms", {})
-                # Verificamos que self.realmCombo esté definido
-                if hasattr(self, "realmCombo"):
-                    self.realmCombo.clear()
-                    self.realmCombo.addItems(list(self.realms_topics.keys()))
-                self.updateTopicsFromGlobal()
                 print("Configuración global de realms/topics cargada (suscriptor).")
+                self.populateRealmTable()
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error al cargar la configuración global:\n{e}")
+                QMessageBox.critical(self, "Error", f"No se pudo cargar realm_topic_config.json:\n{e}")
         else:
-            QMessageBox.warning(self, "Advertencia", "No se encontró el archivo realm_topic_config.json.")
+            QMessageBox.warning(self, "Advertencia", "No se encontró realm_topic_config.json.")
 
-    def updateTopicsFromGlobal(self):
-        current_realm = self.realmCombo.currentText() if hasattr(self, "realmCombo") else "default"
-        self.topicsList.clear()
-        if current_realm in self.realms_topics:
-            for t in self.realms_topics[current_realm]:
-                self.topicsList.addItem(t)
+    def populateRealmTable(self):
+        self.realmTable.blockSignals(True)
+        self.realmTable.setRowCount(0)
+        for realm, info in sorted(self.realms_topics.items()):
+            row = self.realmTable.rowCount()
+            self.realmTable.insertRow(row)
+            itemRealm = QTableWidgetItem(realm)
+            itemRealm.setFlags(itemRealm.flags() | Qt.ItemIsUserCheckable)
+            itemRealm.setCheckState(Qt.Unchecked)
+            self.realmTable.setItem(row, 0, itemRealm)
+            router_url = info.get("router_url", "ws://127.0.0.1:60001/ws")
+            self.realmTable.setItem(row, 1, QTableWidgetItem(router_url))
+        self.realmTable.blockSignals(False)
+        if self.realmTable.rowCount() > 0:
+            self.realmTable.selectRow(0)
+            self.onRealmClicked(0, 0)
+
+    def onRealmClicked(self, row, col):
+        realm_item = self.realmTable.item(row, 0)
+        if realm_item:
+            realm = realm_item.text().strip()
+            self.current_realm = realm
+            if realm not in self.selected_topics_by_realm:
+                topics = set(self.realms_topics.get(realm, {}).get("topics", []))
+                self.selected_topics_by_realm[realm] = topics
+            self.populateTopicTable(realm)
+
+    def onRealmItemChanged(self, item):
+        # Si se cambia el estado del checkbox de un realm, actualiza los topics en la tabla
+        if item.column() != 0:
+            return
+        realm = item.text().strip()
+        if self.current_realm == realm:
+            if item.checkState() == Qt.Checked:
+                # Marcar todos los topics en la tabla
+                for row in range(self.topicTable.rowCount()):
+                    self.topicTable.item(row, 0).setCheckState(Qt.Checked)
+                self.selected_topics_by_realm[realm] = set(self.realms_topics.get(realm, {}).get("topics", []))
+            else:
+                for row in range(self.topicTable.rowCount()):
+                    self.topicTable.item(row, 0).setCheckState(Qt.Unchecked)
+                self.selected_topics_by_realm[realm] = set()
+
+    def populateTopicTable(self, realm):
+        self.topicTable.blockSignals(True)
+        self.topicTable.setRowCount(0)
+        topics = self.realms_topics.get(realm, {}).get("topics", [])
+        selected = self.selected_topics_by_realm.get(realm, set(topics))
+        for t in topics:
+            row = self.topicTable.rowCount()
+            self.topicTable.insertRow(row)
+            t_item = QTableWidgetItem(t)
+            t_item.setFlags(t_item.flags() | Qt.ItemIsUserCheckable)
+            t_item.setCheckState(Qt.Checked if t in selected else Qt.Unchecked)
+            self.topicTable.setItem(row, 0, t_item)
+        self.topicTable.blockSignals(False)
+
+    def onTopicItemChanged(self, item):
+        if not self.current_realm:
+            return
+        realm = self.current_realm
+        topic = item.text().strip()
+        if realm not in self.selected_topics_by_realm:
+            self.selected_topics_by_realm[realm] = set()
+        if item.checkState() == Qt.Checked:
+            self.selected_topics_by_realm[realm].add(topic)
         else:
-            self.topicsList.addItem("default")
+            self.selected_topics_by_realm[realm].discard(topic)
 
-    def addRealm(self):
+    def addRealmRow(self):
         new_realm = self.newRealmEdit.text().strip()
-        if new_realm and new_realm not in [self.realmCombo.itemText(i) for i in range(self.realmCombo.count())]:
-            self.realmCombo.addItem(new_realm)
+        if new_realm:
+            row = self.realmTable.rowCount()
+            self.realmTable.insertRow(row)
+            itemRealm = QTableWidgetItem(new_realm)
+            itemRealm.setFlags(itemRealm.flags() | Qt.ItemIsUserCheckable)
+            itemRealm.setCheckState(Qt.Checked)
+            self.realmTable.setItem(row, 0, itemRealm)
+            self.realmTable.setItem(row, 1, QTableWidgetItem("ws://127.0.0.1:60001/ws"))
             self.newRealmEdit.clear()
 
-    def addTopic(self):
+    def deleteRealmRow(self):
+        rows_to_delete = []
+        for row in range(self.realmTable.rowCount()):
+            item = self.realmTable.item(row, 0)
+            if item and item.checkState() != Qt.Checked:
+                rows_to_delete.append(row)
+        for row in reversed(rows_to_delete):
+            self.realmTable.removeRow(row)
+
+    def addTopicRow(self):
         new_topic = self.newTopicEdit.text().strip()
         if new_topic:
-            self.topicsList.addItem(new_topic)
+            row = self.topicTable.rowCount()
+            self.topicTable.insertRow(row)
+            t_item = QTableWidgetItem(new_topic)
+            t_item.setFlags(t_item.flags() | Qt.ItemIsUserCheckable)
+            t_item.setCheckState(Qt.Checked)
+            self.topicTable.setItem(row, 0, t_item)
+            if self.current_realm:
+                self.selected_topics_by_realm.setdefault(self.current_realm, set()).add(new_topic)
             self.newTopicEdit.clear()
 
-    def deleteTopic(self):
-        for item in self.topicsList.selectedItems():
-            self.topicsList.takeItem(self.topicsList.row(item))
-
-    def loadProjectConfig(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Cargar Configuración de Proyecto", "", "JSON Files (*.json);;All Files (*)")
-        if not filepath:
-            return
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            subscriber_config = config.get("subscriber", {})
-            realms = subscriber_config.get("realms", [])
-            topics = subscriber_config.get("topics", [])
-            if realms:
-                self.realmCombo.clear()
-                self.realmCombo.addItems(realms)
-            if topics:
-                self.topicsList.clear()
-                for topic in topics:
-                    self.topicsList.addItem(topic)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo cargar la configuración:\n{e}")
-
-    def addSubscriberLog(self, realm, topic, timestamp, details):
-        self.viewer.add_message(realm, topic, timestamp, details)
+    def deleteTopicRow(self):
+        rows_to_delete = []
+        for row in range(self.topicTable.rowCount()):
+            t_item = self.topicTable.item(row, 0)
+            if t_item and t_item.checkState() != Qt.Checked:
+                rows_to_delete.append(row)
+        for row in reversed(rows_to_delete):
+            t_item = self.topicTable.item(row, 0)
+            if t_item and self.current_realm:
+                self.selected_topics_by_realm[self.current_realm].discard(t_item.text().strip())
+            self.topicTable.removeRow(row)
 
     def startSubscription(self):
-        from subscriber.subGUI import start_subscriber
-        realm = self.realmCombo.currentText()
-        topics = []
-        # Recopilamos los tópicos seleccionados de topicsList
-        for i in range(self.topicsList.count()):
-            item = self.topicsList.item(i)
-            # Aquí se puede optar por usar isSelected() o por chequear alguna propiedad;
-            # en este ejemplo, consideramos que todos los ítems están "seleccionados" por defecto.
-            # Para mayor control, podríamos usar otro método para marcar los ítems.
-            topics.append(item.text())
-        if not topics:
-            QMessageBox.critical(self, "Error", "Seleccione al menos un tópico.")
-            return
-        url = self.urlEdit.text().strip()
-        def on_message_callback(topic, content):
-            QMetaObject.invokeMethod(
-                self,
-                "onMessageArrivedMainThread",
-                Qt.QueuedConnection,
-                Q_ARG(str, topic),
-                Q_ARG(dict, content)
-            )
-        start_subscriber(url, realm, topics, on_message_callback=on_message_callback)
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.addSubscriberLog(realm, "Suscripción iniciada", timestamp, {"info": f"Suscriptor iniciado: realm={realm}, topics={topics}"})
+        # Para cada realm marcado, se recogen los topics de la selección persistente.
+        for row in range(self.realmTable.rowCount()):
+            realm_item = self.realmTable.item(row, 0)
+            url_item = self.realmTable.item(row, 1)
+            if realm_item and realm_item.checkState() == Qt.Checked:
+                realm = realm_item.text().strip()
+                router_url = url_item.text().strip() if url_item else "ws://127.0.0.1:60001/ws"
+                selected_topics = list(self.selected_topics_by_realm.get(realm, []))
+                if selected_topics:
+                    start_subscriber(router_url, realm, selected_topics, self.handleMessage)
+                    # Registrar la suscripción en el viewer
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    subscription_info = {
+                        "action": "subscribe",
+                        "realm": realm,
+                        "router_url": router_url,
+                        "topics": selected_topics
+                    }
+                    details = json.dumps(subscription_info, indent=2, ensure_ascii=False)
+                    self.viewer.add_message(realm, "Subscription", timestamp, details)
+                    print(f"Suscrito a realm '{realm}' con topics {selected_topics}")
+                    sys.stdout.flush()
+                else:
+                    QMessageBox.warning(self, "Advertencia", f"No hay topics seleccionados para realm {realm}.")
 
-    @pyqtSlot(str, dict)
-    def onMessageArrivedMainThread(self, topic, content):
-        realm = self.realmCombo.currentText()
+    def handleMessage(self, realm, topic, content):
+        # Se llama desde el hilo del suscriptor.
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.addSubscriberLog(realm, topic, timestamp, content)
+        details = json.dumps(content, indent=2, ensure_ascii=False)
+        self.messageReceived.emit(realm, topic, timestamp, details)
+        print(f"Mensaje recibido en realm '{realm}', topic '{topic}' a las {timestamp}")
+        sys.stdout.flush()
 
-    def pauseSubscription(self):
-        global global_session_sub, global_loop_sub
-        if global_session_sub is not None:
-            try:
-                global_session_sub.leave()
-                print("Suscripción pausada.")
-            except Exception as e:
-                print("Error al pausar la suscripción:", e)
-            global_session_sub = None
-            global_loop_sub = None
-        else:
-            QMessageBox.information(self, "Información", "No hay una suscripción activa.")
+    @pyqtSlot(str, str, str, str)
+    def onMessageReceived(self, realm, topic, timestamp, details):
+        self.viewer.add_message(realm, topic, timestamp, details)
 
     def resetLog(self):
-        self.viewer.messageTable.setRowCount(0)
+        self.viewer.table.setRowCount(0)
         self.viewer.messages = []
 
-    def getProjectConfigLocal(self):
-        realms = [self.realmCombo.itemText(i) for i in range(self.realmCombo.count())]
-        topics = []
-        for i in range(self.topicsList.count()):
-            topics.append(self.topicsList.item(i).text())
-        return {"realms": realms, "topics": topics}
-
     def loadProjectFromConfig(self, sub_config):
-        realms = sub_config.get("realms", [])
-        topics = sub_config.get("topics", [])
-        if realms:
-            self.realmCombo.clear()
-            self.realmCombo.addItems(realms)
-        if topics:
-            self.topicsList.clear()
-            for topic in topics:
-                self.topicsList.addItem(topic)
+        # Implementa la carga de proyecto si es necesario.
+        pass
+
+# Fin de SubscriberTab

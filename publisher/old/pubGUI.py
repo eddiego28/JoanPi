@@ -202,7 +202,7 @@ class PublisherTab(QWidget):
         self.loadProjectFromConfig(pub_config)
         # Si deseas también actualizar la configuración del suscriptor:
         sub_config = project.get("subscriber", {})
-        from subscriber.subGUI import SubscriberTab
+        from subscriber.old.subGUI import SubscriberTab
         if hasattr(self.parent(), "subscriberTab"):
             self.parent().subscriberTab.loadProjectFromConfig(sub_config)
         QMessageBox.information(self, "Proyecto", "Proyecto cargado correctamente.")

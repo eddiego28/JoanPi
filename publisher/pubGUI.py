@@ -40,7 +40,7 @@ def start_publisher(url, realm, topic):
     threading.Thread(target=run, daemon=True).start()
 
 # --------------------------------------------------------------------
-# Función send_message_now: envía el mensaje con delay (si se especifica)
+# Función send_message_now: envía el mensaje (con delay opcional)
 # --------------------------------------------------------------------
 def send_message_now(topic, message, delay=0):
     global global_session, global_loop
@@ -116,9 +116,8 @@ class PublisherMessageViewer(QWidget):
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
-        # Fijar la altura del widget a 200 px (ajústalo según necesites)
         self.setFixedHeight(200)
-        
+
     def add_message(self, realms, topics, timestamp, details):
         row = self.table.rowCount()
         self.table.insertRow(row)
@@ -126,7 +125,7 @@ class PublisherMessageViewer(QWidget):
         self.table.setItem(row, 1, QTableWidgetItem(", ".join(realms)))
         self.table.setItem(row, 2, QTableWidgetItem(", ".join(topics)))
         self.pubMessages.append(details)
-        
+
     def showDetails(self, item):
         row = item.row()
         if row < len(self.pubMessages):
@@ -135,13 +134,17 @@ class PublisherMessageViewer(QWidget):
             dlg.exec_()
 
 # --------------------------------------------------------------------
-# Clase MessageConfigWidget: Configuración individual del mensaje.
-# Organiza en el lado izquierdo las tablas de realms y topics, y en el lado derecho el editor JSON y controles.
+# Clase MessageConfigWidget: configuración individual del mensaje a publicar.
+# Organiza en el lado izquierdo las tablas de realms y topics y en el lado derecho el editor JSON y controles.
+# Ahora se conserva el estado de los checkboxes para cada realm.
 # --------------------------------------------------------------------
 class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
         self.msg_id = msg_id
+        # Diccionario para almacenar la selección de topics por realm
+        self.selected_topics_by_realm = {}
+        self.current_realm = None
         self.initUI()
 
     def initUI(self):
@@ -165,8 +168,12 @@ class MessageConfigWidget(QGroupBox):
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         leftPanel.addWidget(QLabel("Topics (checkbox):"))
         leftPanel.addWidget(self.topicTable)
+        # Conectar la señal para actualizar la selección de topics
+        self.topicTable.itemChanged.connect(self.onTopicChanged)
+        # Conectar clic en la tabla de realms para cargar topics
+        self.realmTable.cellClicked.connect(self.onRealmClicked)
         hLayout.addLayout(leftPanel, stretch=1)
-        # Panel derecho: editor JSON y controles
+        # Panel derecho: editor JSON y controles de modo y tiempo
         rightPanel = QVBoxLayout()
         self.editorWidget = PublisherEditorWidget(self)
         rightPanel.addWidget(QLabel("Editor JSON:"))
@@ -246,6 +253,9 @@ class MessageConfigWidget(QGroupBox):
             item.setCheckState(Qt.Checked)
             self.topicTable.setItem(row, 0, item)
             self.newTopicEdit.clear()
+            # Actualiza la selección para el realm actual
+            if self.current_realm:
+                self.selected_topics_by_realm.setdefault(self.current_realm, set()).add(new_topic)
 
     def deleteTopicRow(self):
         rows_to_delete = []
@@ -254,44 +264,48 @@ class MessageConfigWidget(QGroupBox):
             if item and item.checkState() != Qt.Checked:
                 rows_to_delete.append(row)
         for row in reversed(rows_to_delete):
+            t_item = self.topicTable.item(row, 0)
+            if t_item and self.current_realm:
+                self.selected_topics_by_realm[self.current_realm].discard(t_item.text().strip())
             self.topicTable.removeRow(row)
-
-    def updateRealmsTopics(self, realms_topics):
-        self.realmTable.blockSignals(True)
-        self.realmTable.setRowCount(0)
-        for realm, info in sorted(realms_topics.items()):
-            row = self.realmTable.rowCount()
-            self.realmTable.insertRow(row)
-            item = QTableWidgetItem(realm)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            # Se marca por defecto (puedes cambiarlo si lo deseas)
-            item.setCheckState(Qt.Checked)
-            self.realmTable.setItem(row, 0, item)
-            router_url = info.get("router_url", "ws://127.0.0.1:60001/ws")
-            self.realmTable.setItem(row, 1, QTableWidgetItem(router_url))
-        self.realmTable.blockSignals(False)
-        if self.realmTable.rowCount() > 0:
-            self.realmTable.selectRow(0)
-            self.onRealmClicked(0, 0)
 
     def onRealmClicked(self, row, col):
         realm_item = self.realmTable.item(row, 0)
         if realm_item:
             realm = realm_item.text().strip()
+            self.current_realm = realm
+            # Cargar la lista de topics desde la configuración global para ese realm
             topics = self.parent().publisherTab.realms_topics.get(realm, {}).get("topics", [])
             self.topicTable.blockSignals(True)
             self.topicTable.setRowCount(0)
+            # Si ya se tiene una selección guardada para ese realm, usarla; de lo contrario, marcar todos por defecto.
+            if realm not in self.selected_topics_by_realm:
+                self.selected_topics_by_realm[realm] = set(topics)
             for t in topics:
-                row = self.topicTable.rowCount()
-                self.topicTable.insertRow(row)
+                row_idx = self.topicTable.rowCount()
+                self.topicTable.insertRow(row_idx)
                 t_item = QTableWidgetItem(t)
                 t_item.setFlags(t_item.flags() | Qt.ItemIsUserCheckable)
-                t_item.setCheckState(Qt.Checked)
-                self.topicTable.setItem(row, 0, t_item)
+                # Usar la selección guardada
+                if t in self.selected_topics_by_realm[realm]:
+                    t_item.setCheckState(Qt.Checked)
+                else:
+                    t_item.setCheckState(Qt.Unchecked)
+                self.topicTable.setItem(row_idx, 0, t_item)
             self.topicTable.blockSignals(False)
 
+    def onTopicChanged(self, item):
+        if not self.current_realm:
+            return
+        realm = self.current_realm
+        selected = set()
+        for row in range(self.topicTable.rowCount()):
+            t_item = self.topicTable.item(row, 0)
+            if t_item and t_item.checkState() == Qt.Checked:
+                selected.add(t_item.text().strip())
+        self.selected_topics_by_realm[realm] = selected
+
     def getRouterURL(self):
-        # Devuelve el router URL de la primera fila de la tabla de realms
         if self.realmTable.rowCount() > 0:
             return self.realmTable.item(0, 1).text().strip()
         return "ws://127.0.0.1:60001/ws"
@@ -372,7 +386,7 @@ class MessageConfigWidget(QGroupBox):
             "content": content,
             "mode": mode,
             "time": time_str,
-            "router_url": self.realmTable.item(0, 1).text().strip() if self.realmTable.rowCount() > 0 else "ws://127.0.0.1:60001/ws"
+            "router_url": self.realmTable.item(0,1).text().strip() if self.realmTable.rowCount() > 0 else "ws://127.0.0.1:60001/ws"
         }
 
 # --------------------------------------------------------------------
@@ -421,7 +435,7 @@ class PublisherTab(QWidget):
         splitter.addWidget(self.viewer)
         splitter.setSizes([500, 200])
         layout.addWidget(splitter)
-        # Botón global para iniciar el publicador (inicia sesión vacía para evitar error)
+        # Botón global para iniciar el publicador (para iniciar sesión vacía)
         connLayout = QHBoxLayout()
         connLayout.addWidget(QLabel("Publicador Global"))
         self.globalStartButton = QPushButton("Iniciar Publicador")
@@ -449,7 +463,8 @@ class PublisherTab(QWidget):
                             }
                     data = {"realms": realms_dict}
                 self.realms_topics = data.get("realms", {})
-                self.realm_configs = {realm: info.get("router_url", "ws://127.0.0.1:60001/ws") for realm, info in self.realms_topics.items()}
+                self.realm_configs = {realm: info.get("router_url", "ws://127.0.0.1:60001/ws")
+                                      for realm, info in self.realms_topics.items()}
                 print("Configuración global de realms/topics cargada (publicador).")
                 for widget in self.msgWidgets:
                     widget.updateRealmsTopics(self.realms_topics)
@@ -480,13 +495,8 @@ class PublisherTab(QWidget):
         if self.msgWidgets:
             config = self.msgWidgets[0].getConfig()
             start_publisher(config["router_url"], config["realms"][0], config["topics"][0])
-            # Registrar en el visor que se inició la sesión
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_info = {
-                "action": "start_publisher",
-                "realm": config["realms"][0],
-                "topic": config["topics"][0]
-            }
+            log_info = {"action": "start_publisher", "realm": config["realms"][0], "topic": config["topics"][0]}
             details = json.dumps(log_info, indent=2, ensure_ascii=False)
             self.viewer.add_message([config["realms"][0]], [config["topics"][0]], timestamp, details)
             print(f"Sesión de publicador iniciada en realm '{config['realms'][0]}' con topic '{config['topics'][0]}'")
@@ -502,7 +512,8 @@ class PublisherTab(QWidget):
                     send_message_now(topic, config.get("content", {}), delay=0)
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sent_message = json.dumps(config.get("content", {}), indent=2, ensure_ascii=False)
-            self.viewer.add_message(", ".join(config.get("realms", [])), ", ".join(config.get("topics", [])), timestamp, sent_message)
+            self.viewer.add_message(", ".join(config.get("realms", [])),
+                                     ", ".join(config.get("topics", [])), timestamp, sent_message)
             print(f"Mensaje publicado en realms {config.get('realms', [])} y topics {config.get('topics', [])} a las {timestamp}")
 
     def getProjectConfig(self):
@@ -510,7 +521,7 @@ class PublisherTab(QWidget):
         return {"scenarios": scenarios, "realm_configs": self.realm_configs}
 
     def loadProject(self):
-        # Método dummy para evitar error; implementar según sea necesario.
+        # Método dummy para evitar error; implementa según tus necesidades.
         pass
 
 # --------------------------------------------------------------------

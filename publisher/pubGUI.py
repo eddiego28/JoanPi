@@ -2,63 +2,76 @@ import sys, os, json, datetime, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
-    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox
+    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QPushButton,
+    QTreeWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 from .pubEditor import PublisherEditorWidget
 
-# Variables globales para la sesión del publicador
-global_session = None
-global_loop = None
+# Diccionario global para almacenar sesiones de publicación
+# La clave es (router_url, realm, topic)
+publisher_sessions = {}
 
 # --------------------------------------------------------------------
-# Clase JSONPublisher: sesión WAMP para publicar
+# Clase JSONPublisher: sesión WAMP para publicar en un realm/topic específicos.
+# Se guarda en publisher_sessions cuando se conecta.
 # --------------------------------------------------------------------
 class JSONPublisher(ApplicationSession):
-    def __init__(self, config, topic):
+    def __init__(self, config, topic, key):
         super().__init__(config)
         self.topic = topic
+        self.key = key  # clave (router_url, realm, topic)
 
     async def onJoin(self, details):
-        global global_session, global_loop
-        global_session = self
-        global_loop = asyncio.get_event_loop()
+        # Al conectarse, se almacena esta sesión en publisher_sessions
+        publisher_sessions[self.key] = self
         print("Conexión establecida en el publicador (realm:", self.config.realm, ")")
         await asyncio.Future()  # Mantiene la sesión activa
 
 # --------------------------------------------------------------------
-# Función start_publisher: inicia la sesión en un hilo separado.
+# Función start_publisher: inicia la sesión para una clave (router_url, realm, topic).
+# Si ya existe la sesión en publisher_sessions, no hace nada.
 # --------------------------------------------------------------------
-def start_publisher(url, realm, topic):
+def start_publisher(router_url, realm, topic):
+    key = (router_url, realm, topic)
+    if key in publisher_sessions:
+        return  # Ya existe la sesión
     def run():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        runner = ApplicationRunner(url=url, realm=realm)
-        runner.run(lambda config: JSONPublisher(config, topic))
+        runner = ApplicationRunner(url=router_url, realm=realm)
+        # runner.run es bloqueante, por lo que cuando se conecte, la sesión se almacenará en publisher_sessions
+        runner.run(lambda config: JSONPublisher(config, topic, key))
     threading.Thread(target=run, daemon=True).start()
 
 # --------------------------------------------------------------------
-# Función send_message_now: envía el mensaje (con delay opcional)
+# Función send_message_now: utiliza la sesión almacenada en publisher_sessions para publicar.
+# Si no existe la sesión para la combinación, se la inicia y se espera (breve delay).
 # --------------------------------------------------------------------
-def send_message_now(topic, message, delay=0):
-    global global_session, global_loop
-    if global_session is None or global_loop is None:
-        print("No hay sesión activa. Inicia el publicador primero.")
-        return
-    async def _send():
+def send_message_now(key, message, delay=0):
+    # key es (router_url, realm, topic)
+    async def _send(session):
         if delay > 0:
             await asyncio.sleep(delay)
         if isinstance(message, dict):
-            global_session.publish(topic, **message)
+            session.publish(key[2], **message)
         else:
-            global_session.publish(topic, message)
+            session.publish(key[2], message)
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message_json = json.dumps(message, indent=2, ensure_ascii=False)
-        log_to_file(timestamp, topic, "publicador", message_json)
-        print("Mensaje enviado en", topic, ":", message)
-    asyncio.run_coroutine_threadsafe(_send(), global_loop)
+        log_to_file(timestamp, key[2], key[1], message_json)
+        print("Mensaje enviado en", key[2], "para realm", key[1], ":", message)
+    # Si la sesión aún no existe, esperar un breve momento para que se conecte.
+    if key not in publisher_sessions:
+        start_publisher(key[0], key[1], key[2])
+        # Esperamos 1 segundo; en una implementación real se debería esperar de forma asíncrona.
+        import time
+        time.sleep(1)
+    session = publisher_sessions.get(key)
+    if session:
+        asyncio.run_coroutine_threadsafe(_send(session), session.loop)
 
 # --------------------------------------------------------------------
 # Clase JsonTreeDialog: muestra el JSON en formato de árbol (1 columna)
@@ -134,15 +147,15 @@ class PublisherMessageViewer(QWidget):
             dlg.exec_()
 
 # --------------------------------------------------------------------
-# Clase MessageConfigWidget: configuración individual del mensaje a publicar.
-# Organiza en el lado izquierdo (tablas de realms y topics) y en el lado derecho (editor JSON y controles).
-# Mantiene el estado de los checkboxes hasta que el usuario los desmarque.
+# Clase MessageConfigWidget: configuración individual del mensaje.
+# – En el lado izquierdo se muestran las tablas de realms y topics (con checkboxes)
+# – Se conserva el estado de los checkboxes para cada realm hasta que el usuario lo modifique
 # --------------------------------------------------------------------
 class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
         self.msg_id = msg_id
-        self.realms_topics = {}  # Se actualizará con la configuración global
+        self.realms_topics = {}  # Configuración global (se actualiza)
         self.selected_topics_by_realm = {}  # Para conservar la selección por realm
         self.current_realm = None
         self.initUI()
@@ -154,7 +167,7 @@ class MessageConfigWidget(QGroupBox):
         self.toggled.connect(self.toggleContent)
         layout = QVBoxLayout(self)
 
-        # Layout horizontal: Panel izquierdo (tablas) y derecho (editor JSON y controles)
+        # Layout horizontal: izquierda (tablas) y derecha (editor JSON y controles)
         hLayout = QHBoxLayout()
         # Panel izquierdo: Tablas de realms y topics
         leftPanel = QVBoxLayout()
@@ -168,11 +181,12 @@ class MessageConfigWidget(QGroupBox):
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         leftPanel.addWidget(QLabel("Topics (checkbox):"))
         leftPanel.addWidget(self.topicTable)
-        # Conectar señales para actualizar la selección de topics
+        # Conectar señales para actualizar selección: al hacer clic en realm y al cambiar topic
         self.realmTable.cellClicked.connect(self.onRealmClicked)
         self.topicTable.itemChanged.connect(self.onTopicChanged)
         hLayout.addLayout(leftPanel, stretch=1)
-        # Panel derecho: Editor JSON y controles
+
+        # Panel derecho: Editor JSON y controles de modo/tiempo
         rightPanel = QVBoxLayout()
         self.editorWidget = PublisherEditorWidget(self)
         rightPanel.addWidget(QLabel("Editor JSON:"))
@@ -272,11 +286,11 @@ class MessageConfigWidget(QGroupBox):
         if realm_item:
             realm = realm_item.text().strip()
             self.current_realm = realm
-            # Cargar topics asociados al realm desde la configuración global almacenada en self.realms_topics
+            # Cargar topics del realm según la configuración global
             topics = self.realms_topics.get(realm, {}).get("topics", [])
             self.topicTable.blockSignals(True)
             self.topicTable.setRowCount(0)
-            # Conservar la selección actual de topics para este realm; si no existe, se inicializa con todos marcados
+            # Si ya hay selección previa para este realm, conservarla; de lo contrario, marcar todos
             if realm not in self.selected_topics_by_realm:
                 self.selected_topics_by_realm[realm] = set(topics)
             for t in topics:
@@ -303,7 +317,6 @@ class MessageConfigWidget(QGroupBox):
         self.selected_topics_by_realm[realm] = selected
 
     def updateRealmsTopics(self, realms_topics):
-        # Guarda la configuración global localmente y actualiza la tabla de realms.
         self.realms_topics = realms_topics
         self.realmTable.blockSignals(True)
         self.realmTable.setRowCount(0)
@@ -353,6 +366,7 @@ class MessageConfigWidget(QGroupBox):
                 delay = h * 3600 + m * 60 + s
             except:
                 delay = 0
+        # Enviar el mensaje a cada combinación de realm y topic marcados
         for realm in realms:
             router_url = None
             for r in range(self.realmTable.rowCount()):
@@ -526,10 +540,15 @@ class PublisherTab(QWidget):
             for realm in config.get("realms", []):
                 router_url = self.realm_configs.get(realm, widget.getRouterURL())
                 for topic in config.get("topics", []):
-                    send_message_now(topic, config.get("content", {}), delay=0)
+                    # Para cada combinación, iniciamos (o reutilizamos) la sesión y publicamos
+                    key = (router_url, realm, topic)
+                    start_publisher(router_url, realm, topic)
+                    send_message_now(key[2], config.get("content", {}), delay=0)
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sent_message = json.dumps(config.get("content", {}), indent=2, ensure_ascii=False)
-            self.viewer.add_message(", ".join(config.get("realms", [])), ", ".join(config.get("topics", [])), timestamp, sent_message)
+            self.viewer.add_message(", ".join(config.get("realms", [])),
+                                     ", ".join(config.get("topics", [])),
+                                     timestamp, sent_message)
             print(f"Mensaje publicado en realms {config.get('realms', [])} y topics {config.get('topics', [])} a las {timestamp}")
 
     def getProjectConfig(self):
@@ -537,7 +556,7 @@ class PublisherTab(QWidget):
         return {"scenarios": scenarios, "realm_configs": self.realm_configs}
 
     def loadProject(self):
-        # Método dummy para evitar error; implementa según tus necesidades.
+        # Método dummy para evitar error; implementar según sea necesario.
         pass
 
 # --------------------------------------------------------------------

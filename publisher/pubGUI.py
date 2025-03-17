@@ -2,7 +2,7 @@ import sys, os, json, datetime, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
-    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QPushButton, QTreeWidgetItem
+    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox
 )
 from PyQt5.QtCore import Qt, QTimer
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner

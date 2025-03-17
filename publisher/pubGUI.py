@@ -14,7 +14,7 @@ global_session = None
 global_loop = None
 
 # --------------------------------------------------------------------
-# Clase JSONPublisher: sesión WAMP para publicar
+# Clase JSONPublisher: sesión WAMP para publicar en un realm/topic
 # --------------------------------------------------------------------
 class JSONPublisher(ApplicationSession):
     def __init__(self, config, topic):
@@ -40,7 +40,7 @@ def start_publisher(url, realm, topic):
     threading.Thread(target=run, daemon=True).start()
 
 # --------------------------------------------------------------------
-# Función send_message_now: envía el mensaje con delay (si se especifica)
+# Función send_message_now: envía el mensaje (con delay opcional)
 # --------------------------------------------------------------------
 def send_message_now(topic, message, delay=0):
     global global_session, global_loop
@@ -96,7 +96,7 @@ class JsonTreeDialog(QDialog):
             parent.addChild(item)
 
 # --------------------------------------------------------------------
-# Clase PublisherMessageViewer: muestra los mensajes enviados en una única fila.
+# Clase PublisherMessageViewer: muestra los mensajes enviados (una fila por mensaje)
 # Se fija la altura a 200 px.
 # --------------------------------------------------------------------
 class PublisherMessageViewer(QWidget):
@@ -135,18 +135,18 @@ class PublisherMessageViewer(QWidget):
 
 # --------------------------------------------------------------------
 # Clase MessageConfigWidget: configuración individual del mensaje.
-# Organiza en el lado izquierdo las tablas de realms y topics y en el lado derecho el editor JSON y controles.
-# Se conserva el estado de los checkboxes hasta que el usuario los desmarque.
-# Se agrega la referencia publisherTab para acceder al visor.
+# – En el panel izquierdo se muestran las tablas de realms y topics.
+# – Se conserva el estado de los checkboxes hasta que el usuario los desmarque.
+# – Se asigna la referencia publisherTab para acceder al visor.
 # --------------------------------------------------------------------
 class MessageConfigWidget(QGroupBox):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
         self.msg_id = msg_id
-        self.realms_topics = {}  # Se actualizará con la configuración global
-        self.selected_topics_by_realm = {}  # Para conservar la selección por realm
+        self.realms_topics = {}  # Configuración global de realms (se actualiza con updateRealmsTopics)
+        self.selected_topics_by_realm = {}  # Conserva la selección de topics para cada realm
         self.current_realm = None
-        self.publisherTab = None  # Esta referencia se asigna desde PublisherTab al añadir el widget
+        self.publisherTab = None  # Se asigna desde PublisherTab al agregar este widget
         self.initUI()
 
     def initUI(self):
@@ -156,9 +156,9 @@ class MessageConfigWidget(QGroupBox):
         self.toggled.connect(self.toggleContent)
         layout = QVBoxLayout(self)
 
-        # Layout horizontal: izquierda (tablas) y derecha (editor JSON y controles)
+        # Layout horizontal: panel izquierdo (tablas de realms y topics) y derecho (editor JSON y controles)
         hLayout = QHBoxLayout()
-        # Panel izquierdo: tablas de realms y topics
+        # Panel izquierdo
         leftPanel = QVBoxLayout()
         self.realmTable = QTableWidget(0, 2)
         self.realmTable.setHorizontalHeaderLabels(["Realm", "Router URL"])
@@ -170,11 +170,11 @@ class MessageConfigWidget(QGroupBox):
         self.topicTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         leftPanel.addWidget(QLabel("Topics (checkbox):"))
         leftPanel.addWidget(self.topicTable)
-        # Conectar señales: clic en realm y cambio en topic
+        # Conecta la selección del realm y los cambios de topic
         self.realmTable.cellClicked.connect(self.onRealmClicked)
         self.topicTable.itemChanged.connect(self.onTopicChanged)
         hLayout.addLayout(leftPanel, stretch=1)
-        # Panel derecho: editor JSON y controles
+        # Panel derecho
         rightPanel = QVBoxLayout()
         self.editorWidget = PublisherEditorWidget(self)
         rightPanel.addWidget(QLabel("Editor JSON:"))
@@ -274,7 +274,7 @@ class MessageConfigWidget(QGroupBox):
         if realm_item:
             realm = realm_item.text().strip()
             self.current_realm = realm
-            # Cargar topics asociados a este realm según la configuración global
+            # Cargar topics asociados al realm desde la configuración global
             topics = self.publisherTab.realms_topics.get(realm, {}).get("topics", [])
             self.topicTable.blockSignals(True)
             self.topicTable.setRowCount(0)
@@ -363,6 +363,7 @@ class MessageConfigWidget(QGroupBox):
             if router_url is None:
                 router_url = "ws://127.0.0.1:60001/ws"
             for topic in topics:
+                # Inicia la sesión para cada combinación y publica
                 start_publisher(router_url, realm, topic)
                 send_message_now(topic, content, delay)
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -375,6 +376,7 @@ class MessageConfigWidget(QGroupBox):
             "content": content
         }
         details = json.dumps(log_info, indent=2, ensure_ascii=False)
+        # Usamos la referencia publisherTab para acceder al visor
         self.publisherTab.viewer.add_message(", ".join(realms), ", ".join(topics), timestamp, details)
         print(f"Mensaje publicado en realms {realms} y topics {topics} a las {timestamp}")
 
@@ -439,7 +441,7 @@ class PublisherTab(QWidget):
         btnEnviarTodos.clicked.connect(self.sendAllAsync)
         toolbar.addWidget(btnEnviarTodos)
         layout.addLayout(toolbar)
-        # Área de mensajes: QSplitter para separar la lista de mensajes y el visor
+        # Área de mensajes: QSplitter para separar la lista y el visor
         splitter = QSplitter(Qt.Vertical)
         self.msgArea = QScrollArea()
         self.msgArea.setWidgetResizable(True)
@@ -452,7 +454,7 @@ class PublisherTab(QWidget):
         splitter.addWidget(self.viewer)
         splitter.setSizes([500, 200])
         layout.addWidget(splitter)
-        # Botón global para iniciar el publicador (para iniciar sesión vacía)
+        # Botón global para iniciar el publicador (inicia una sesión vacía)
         connLayout = QHBoxLayout()
         connLayout.addWidget(QLabel("Publicador Global"))
         self.globalStartButton = QPushButton("Iniciar Publicador")
@@ -492,7 +494,7 @@ class PublisherTab(QWidget):
 
     def addMessage(self):
         widget = MessageConfigWidget(self.next_id, self)
-        widget.publisherTab = self  # Asigna la referencia al PublisherTab para acceder al viewer
+        widget.publisherTab = self  # Asigna la referencia al PublisherTab para acceder al visor
         if self.realms_topics:
             widget.updateRealmsTopics(self.realms_topics)
         self.msgLayout.addWidget(widget)

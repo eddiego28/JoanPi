@@ -2,7 +2,7 @@ import sys, os, json, datetime, asyncio, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
-    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox
+    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QPushButton, QTreeWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -121,10 +121,17 @@ class PublisherMessageViewer(QWidget):
     def add_message(self, realms, topics, timestamp, details):
         row = self.table.rowCount()
         self.table.insertRow(row)
+
+        # Mostrar realms correctamente como texto normal sin separarlos por comas entre letras
+        realm_text = ", ".join(realms) if isinstance(realms, list) else str(realms)
+        topic_text = ", ".join(topics) if isinstance(topics, list) else str(topics)
+
         self.table.setItem(row, 0, QTableWidgetItem(timestamp))
-        self.table.setItem(row, 1, QTableWidgetItem(", ".join(realms)))
-        self.table.setItem(row, 2, QTableWidgetItem(", ".join(topics)))
+        self.table.setItem(row, 1, QTableWidgetItem(realm_text))
+        self.table.setItem(row, 2, QTableWidgetItem(topic_text))
+
         self.pubMessages.append(details)
+
 
     def showDetails(self, item):
         row = item.row()
@@ -513,16 +520,73 @@ class PublisherTab(QWidget):
             widget.deleteLater()
 
     def startPublisher(self):
-        if self.msgWidgets:
-            config = self.msgWidgets[0].getConfig()
-            start_publisher(config["router_url"], config["realms"][0], config["topics"][0])
+        """ Inicia el publicador con los mensajes configurados """
+        if not self.msgWidgets:
+            QMessageBox.warning(self, "Advertencia", "No hay mensajes configurados para publicar.")
+            return
+
+        config = self.msgWidgets[0].getConfig()
+
+        # 🔍 Depuración: Imprimir estructura de realms y topics
+        print(f"🔎 Estructura de realms en config: {config.get('realms')}")
+        print(f"🔎 Estructura de topics en config: {config.get('topics')}")
+
+        if not config or not config.get("realms") or all(len(config["topics"].get(r, [])) == 0 for r in config["realms"]):
+            QMessageBox.warning(self, "Advertencia", "No hay realms o topics configurados para el publicador.")
+            print("❌ No se encontraron realms o topics para publicar.")
+            return
+
+        all_realms = []
+        all_topics = []
+
+        # 🔹 Manejar `realms_data` correctamente
+        realms_data = config["realms"]
+        topics_data = config["topics"]
+
+        if isinstance(realms_data, list):
+            # Si `realms_data` es una lista, transformarla en un diccionario
+            realms_data = {entry: {"router_url": self.realm_configs.get(entry, "ws://127.0.0.1:60001"), 
+                                "topics": topics_data.get(entry, [])} for entry in realms_data}
+
+        print(f"📌 Realms procesados: {realms_data}")
+
+        for realm, realm_data in realms_data.items():
+            if not isinstance(realm_data, dict):
+                print(f"⚠️ Error: realm_data para {realm} no es un diccionario. Valor recibido: {realm_data}")
+                continue  # Saltar esta iteración
+
+            router_url = realm_data.get("router_url", "ws://127.0.0.1:60001")
+            topics = realm_data.get("topics", [])
+
+            if not isinstance(topics, list):
+                print(f"⚠️ Error: topics en {realm} no es una lista. Valor recibido: {topics}")
+                topics = []  # Corregir a lista vacía
+
+            if topics:
+                all_realms.append(realm)
+                all_topics.append(f"{realm}: {', '.join(topics)}")
+
+                for topic in topics:
+                    start_publisher(router_url, realm, topic)
+
+        # 🔹 Guardar el registro en la tabla QTableWidget del publicador
+        if all_realms and all_topics:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_info = {"action": "start_publisher", "realm": config["realms"][0], "topic": config["topics"][0]}
+            log_info = {
+                "action": "start_publisher",
+                "realms": all_realms,
+                "topics": all_topics
+            }
             details = json.dumps(log_info, indent=2, ensure_ascii=False)
-            self.viewer.add_message([config["realms"][0]], [config["topics"][0]], timestamp, details)
-            print(f"Sesión de publicador iniciada en realm '{config['realms'][0]}' con topic '{config['topics'][0]}'")
+
+            # Agregar registro al log del publicador (QTableWidget)
+            self.viewer.add_message(all_realms, all_topics, timestamp, details)
+            print(f"✅ Publicador iniciado en realms {all_realms} con topics {all_topics} a las {timestamp}")
+
         else:
-            print("No hay mensajes configurados.")
+            QMessageBox.warning(self, "Advertencia", "No hay realms o topics configurados para el publicador.")
+
+
 
     def sendAllAsync(self):
         for widget in self.msgWidgets:

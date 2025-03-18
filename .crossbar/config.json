@@ -24,6 +24,25 @@
                             ]
                         }
                     ]
+                },
+                {
+                    "name": "default2",
+                    "roles": [
+                        {
+                            "name": "anonymous",
+                            "permissions": [
+                                {
+                                    "uri": "*",
+                                    "allow": {
+                                        "call": true,
+                                        "register": true,
+                                        "publish": true,
+                                        "subscribe": true
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 }
             ],
             "transports": [
@@ -32,6 +51,14 @@
                     "endpoint": {
                         "type": "tcp",
                         "port": 60001
+                    },
+                    "debug": true
+                },
+                {
+                    "type": "websocket",
+                    "endpoint": {
+                        "type": "tcp",
+                        "port": 60002
                     },
                     "debug": true
                 },

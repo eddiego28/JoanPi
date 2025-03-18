@@ -1,0 +1,30 @@
+2025-03-17 20:57:28 - 2025-03-17 20:57:28 | Realm: MsgCrEnt | Topic: publicador
+{}
+
+
+2025-03-17 20:57:28 - 2025-03-17 20:57:28 | Realm: MsgEP | Topic: publicador
+{}
+
+
+2025-03-17 20:57:28 - 2025-03-17 20:57:28 | Realm: topic2dd | Topic: publicador
+{}
+
+
+2025-03-17 20:57:28 - 2025-03-17 20:57:28 | Realm: topic1 | Topic: publicador
+{}
+
+
+2025-03-17 20:57:28 - 2025-03-17 20:57:28 | Realm: default2 | Topic: MsgCrEnt
+{
+  "args": [],
+  "kwargs": {}
+}
+
+
+2025-03-17 20:57:28 - 2025-03-17 20:57:28 | Realm: default2 | Topic: MsgEP
+{
+  "args": [],
+  "kwargs": {}
+}
+
+

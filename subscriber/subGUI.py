@@ -2,7 +2,7 @@ import os, json, datetime, asyncio, threading, sys
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
-    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox
+    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QPushButton, QTreeWidgetItem
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -329,79 +329,29 @@ class SubscriberTab(QWidget):
             self.topicTable.removeRow(row)
 
     def startSubscription(self):
-        """ Se suscribe SOLO a los topics marcados en cada realm en el momento de pulsar 'Suscribirse'. """
-
-        global global_session_sub
-
-        # 🔹 Si hay una sesión previa, cerrarla antes de iniciar una nueva
-        if global_session_sub is not None:
-            try:
-                global_session_sub.leave()
-                print("🔄 Sesión previa cerrada correctamente.")
-            except Exception as e:
-                print(f"⚠️ Error al cerrar sesión previa: {e}")
-            global_session_sub = None
-
-        selected_realms = []
-        selected_topics_by_realm = {}
-
-        # 🔹 Recorrer la tabla de realms y obtener los que están seleccionados
+        # Se recorre la tabla de realms y se suscribe solo a los que estén marcados, usando la selección de topics guardada.
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
             url_item = self.realmTable.item(row, 1)
-
             if realm_item and realm_item.checkState() == Qt.Checked:
                 realm = realm_item.text().strip()
                 router_url = url_item.text().strip() if url_item else "ws://127.0.0.1:60001/ws"
-
-                # 🔹 Obtener los topics ASOCIADOS a este realm
-                topics = self.realms_topics.get(realm, {}).get("topics", [])
-
-                # 🔹 Filtrar SOLO los topics seleccionados en el momento
-                selected_topics = [
-                    self.topicTable.item(i, 0).text().strip()
-                    for i in range(self.topicTable.rowCount())
-                    if self.topicTable.item(i, 0).checkState() == Qt.Checked and
-                    self.topicTable.item(i, 0).text().strip() in topics  # 🔹 Asegurar que el topic pertenece a este realm
-                ]
-
-                # 🔹 Asociar topics al realm solo si tiene al menos uno marcado
+                selected_topics = list(self.selected_topics_by_realm.get(realm, []))
                 if selected_topics:
-                    selected_realms.append((realm, router_url))
-                    selected_topics_by_realm[realm] = selected_topics
-
-        # 🔹 Si no hay ningún realm marcado, mostrar advertencia y salir
-        if not selected_realms:
-            QMessageBox.warning(self, "Advertencia", "No hay realms seleccionados para la suscripción.")
-            return
-
-        # 🔹 Verificación: Mostrar qué topics tiene cada realm ANTES de suscribirse
-        print(f"✅ Realms seleccionados y sus topics: {selected_topics_by_realm}")
-
-        # 🔹 Suscribirse a cada realm con SOLO sus topics seleccionados
-        for realm, router_url in selected_realms:
-            topics = selected_topics_by_realm.get(realm, [])
-
-            if topics:
-                start_subscriber(router_url, realm, topics, self.handleMessage)
-
-                # 🔹 Guardar en la tabla de logs del suscriptor (1 fila por realm con sus topics correctos)
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                subscription_info = {
-                    "action": "subscribe",
-                    "realm": realm,
-                    "router_url": router_url,
-                    "topics": topics
-                }
-                details = json.dumps(subscription_info, indent=2, ensure_ascii=False)
-
-                # 🔹 Agregar el registro en la tabla del suscriptor
-                self.viewer.add_message(realm, ", ".join(topics), timestamp, details)
-                print(f"✅ Suscrito correctamente a realm '{realm}' con topics {topics}")
-
-            else:
-                print(f"⚠️ No hay topics seleccionados para realm {realm}, no se suscribe.")
-
+                    start_subscriber(router_url, realm, selected_topics, self.handleMessage)
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    sub_info = {
+                        "action": "subscribe",
+                        "realm": realm,
+                        "router_url": router_url,
+                        "topics": selected_topics
+                    }
+                    details = json.dumps(sub_info, indent=2, ensure_ascii=False)
+                    self.viewer.add_message(realm, ", ".join(selected_topics), timestamp, details)
+                    print(f"Suscrito a realm '{realm}' con topics {selected_topics}")
+                    sys.stdout.flush()
+                else:
+                    QMessageBox.warning(self, "Advertencia", f"No hay topics seleccionados para realm {realm}.")
 
     def handleMessage(self, realm, topic, content):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

@@ -15,14 +15,14 @@ class PublisherEditorWidget(QWidget):
 
         # Layout para tiempo y modos de envío en una misma línea
         timeModeLayout = QHBoxLayout()
-        timeLabel = QLabel("Tiempo (HH:MM:SS):")
+        timeLabel = QLabel("Time (HH:MM:SS):")
         timeModeLayout.addWidget(timeLabel)
         self.commonTimeEdit = QLineEdit("00:00:00")
         timeModeLayout.addWidget(self.commonTimeEdit)
         from PyQt5.QtWidgets import QRadioButton
         self.onDemandRadio = QRadioButton("On-Demand")
-        self.programadoRadio = QRadioButton("Programado")
-        self.tiempoSistemaRadio = QRadioButton("Tiempo del Sistema")
+        self.programadoRadio = QRadioButton("Programmed")
+        self.tiempoSistemaRadio = QRadioButton("TSystem Time")
         self.onDemandRadio.setChecked(True)
         timeModeLayout.addWidget(self.onDemandRadio)
         timeModeLayout.addWidget(self.programadoRadio)
@@ -35,7 +35,7 @@ class PublisherEditorWidget(QWidget):
         # Pestaña de edición en texto JSON
         self.jsonTab = QWidget()
         jsonLayout = QVBoxLayout()
-        loadJsonButton = QPushButton("Cargar JSON desde archivo")
+        loadJsonButton = QPushButton("Load JSON from file")
         loadJsonButton.clicked.connect(self.loadJsonFromFile)
         jsonLayout.addWidget(loadJsonButton)
         self.jsonPreview = QPlainTextEdit()
@@ -48,13 +48,13 @@ class PublisherEditorWidget(QWidget):
         self.treeTab = QWidget()
         treeLayout = QVBoxLayout()
         self.jsonTree = QTreeWidget()
-        self.jsonTree.setHeaderLabels(["Clave", "Valor"])
+        self.jsonTree.setHeaderLabels(["Key", "Value"])
         treeLayout.addWidget(self.jsonTree)
-        self.updateButton = QPushButton("Actualizar campos")
+        self.updateButton = QPushButton("Update Fields")
         self.updateButton.clicked.connect(self.updateJsonFromTree)
         treeLayout.addWidget(self.updateButton)
         self.treeTab.setLayout(treeLayout)
-        self.tabWidget.addTab(self.treeTab, "Árbol JSON")
+        self.tabWidget.addTab(self.treeTab, "JSON Tree")
         
         self.tabWidget.currentChanged.connect(self.onTabChanged)
         layout.addWidget(self.tabWidget)
@@ -68,10 +68,10 @@ class PublisherEditorWidget(QWidget):
                     data = json.load(f)
                 self.jsonPreview.setPlainText(json.dumps(data, indent=2, ensure_ascii=False))
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error al cargar JSON:\n{e}")
+                QMessageBox.critical(self, "Error", f"Error loading JSON:\n{e}")
 
     def onTabChanged(self, index):
-        if self.tabWidget.tabText(index) == "Árbol JSON":
+        if self.tabWidget.tabText(index) == "JSON Tree":
             self.loadTreeFromJson()
     
     def loadTreeFromJson(self):
@@ -79,7 +79,7 @@ class PublisherEditorWidget(QWidget):
         try:
             data = json.loads(self.jsonPreview.toPlainText())
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"JSON inválido:\n{e}")
+            QMessageBox.critical(self, "Error", f"Invalid JSON:\n{e}")
             return
         self.addItems(self.jsonTree.invisibleRootItem(), data)
         self.jsonTree.expandAll()

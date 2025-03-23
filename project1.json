@@ -1,0 +1,28 @@
+{
+  "publisher": {
+    "scenarios": [
+      {
+        "id": 1,
+        "realm": "default",
+        "router_url": "ws://127.0.0.1:60001",
+        "topic": "MsgEP",
+        "content": {
+          "key": "value"
+        },
+        "mode": "onDemand",
+        "time": "00:00:00"
+      },
+      {
+        "id": 2,
+        "realm": "default2",
+        "router_url": "ws://127.0.0.1:60002",
+        "topic": "MsgInitCtr",
+        "content": {
+          "another": "data"
+        },
+        "mode": "onDemand",
+        "time": "00:05:00"
+      }
+    ]
+  }
+}

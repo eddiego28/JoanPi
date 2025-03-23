@@ -197,6 +197,13 @@ class SubscriberTab(QWidget):
         leftLayout.addLayout(btnTopicLayout)
         ctrlLayout = QHBoxLayout()
         self.btnSubscribe = QPushButton("Suscribirse")
+        self.btnSubscribe.setStyleSheet("""
+            QPushButton {
+                background-color: green;
+                color: white;
+                font-weight: bold;
+            }
+        """)
         self.btnSubscribe.clicked.connect(self.startSubscription)
         ctrlLayout.addWidget(self.btnSubscribe)
         self.btnReset = QPushButton("Reset Log")
@@ -204,10 +211,22 @@ class SubscriberTab(QWidget):
         ctrlLayout.addWidget(self.btnReset)
         leftLayout.addLayout(ctrlLayout)
         mainLayout.addLayout(leftLayout, stretch=1)
+        self.btnStopSubscription = QPushButton("Detener Suscripción")
+        self.btnStopSubscription.setStyleSheet("""
+            QPushButton {
+                background-color: red;
+                color: white;
+                font-weight: bold;
+            }
+        """)
+        self.btnStopSubscription.clicked.connect(self.stopSubscription)
+        ctrlLayout.addWidget(self.btnStopSubscription)
         # Panel derecho: Viewer de mensajes
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         self.setLayout(mainLayout)
+        
+        
 
     def loadGlobalRealmTopicConfig(self):
         config_path = os.path.join(os.path.dirname(__file__), "..", "config", "realm_topic_config.json")
@@ -232,6 +251,21 @@ class SubscriberTab(QWidget):
                 QMessageBox.critical(self, "Error", f"No se pudo cargar realm_topic_config.json:\n{e}")
         else:
             QMessageBox.warning(self, "Advertencia", "No se encontró realm_topic_config.json.")
+            
+    def stopSubscription(self):
+        global global_session_sub
+        if global_session_sub is not None:
+            try:
+                global_session_sub.leave("Stop subscription requested")
+                print("Suscripción detenida.")
+                # Create a log entry that the subscription has been stopped
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.viewer.add_message("Subscription", "Stopped", timestamp, "Subscription stopped successfully.")
+            except Exception as e:
+                print("Error al detener suscripción:", e)
+            global_session_sub = None
+        else:
+            QMessageBox.warning(self, "Advertencia", "No hay suscripción activa que detener.")
 
     def populateRealmTable(self):
         self.realmTable.blockSignals(True)

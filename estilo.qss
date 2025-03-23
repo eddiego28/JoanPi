@@ -1,69 +1,56 @@
-/* Estilo general */
+/* Fondo general y tipografía */
 QWidget {
-    background-color: #f2f2f2;
+    background-color: #BBDEFB; /* Azul apagado */
     font-family: "Segoe UI", sans-serif;
     font-size: 10pt;
+    color: #212121;
 }
 
-/* Estilos para botones */
+/* Botones */
 QPushButton {
-    background-color: #007ACC;
+    background-color: #1976D2;
     color: white;
     border: none;
-    padding: 8px 16px;
+    padding: 6px 12px;
     border-radius: 4px;
 }
 QPushButton:hover {
-    background-color: #005A9E;
+    background-color: #1565C0;
+}
+QPushButton:pressed {
+    background-color: #0D47A1;
 }
 
-/* Estilos para QGroupBox */
+/* GroupBox */
 QGroupBox {
-    border: 1px solid #cccccc;
+    border: 1px solid #90CAF9;
     border-radius: 5px;
     margin-top: 10px;
-    background-color: #ffffff;
+    background-color: #E3F2FD;
+    padding: 10px;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top center;
     padding: 0 3px;
-    color: #333333;
+    color: #0D47A1;
     font-weight: bold;
 }
 
-/* Estilos para QTabWidget */
-QTabWidget::pane {
-    border: 1px solid #cccccc;
-    border-radius: 5px;
+/* QTableWidget */
+QTableWidget {
+    background-color: white;
+    alternate-background-color: #E3F2FD;
+    gridline-color: #90CAF9;
 }
-QTabBar::tab {
-    background: #e1e1e1;
-    border: 1px solid #cccccc;
-    padding: 8px;
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
-    min-width: 120px;
-}
-QTabBar::tab:selected {
-    background: #ffffff;
-    border-bottom: 1px solid #ffffff;
-}
-
-/* Estilos para el menú */
-QMenuBar {
-    background-color: #007ACC;
+QHeaderView::section {
+    background-color: #1976D2;
     color: white;
-}
-QMenuBar::item {
-    background: transparent;
-    padding: 4px 8px;
-}
-QMenuBar::item:selected {
-    background: #005A9E;
+    padding: 4px;
+    border: 1px solid #90CAF9;
 }
 
-/* Estilos para QSplashScreen */
-QSplashScreen {
-    background-color: #003366;
+/* QCheckBox */
+QCheckBox {
+    spacing: 5px;
 }

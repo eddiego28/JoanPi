@@ -1,56 +1,196 @@
-/* Fondo general y tipografía */
+/* Estilo global */
 QWidget {
-    background-color: #BBDEFB; /* Azul apagado */
+    background-color: #C6EAFA;  /* Azul apagado elegante de fondo */
     font-family: "Segoe UI", sans-serif;
     font-size: 10pt;
-    color: #212121;
+    color: #333333;  /* Texto principal en gris oscuro para buen contraste */
+}
+
+/* Barra de título de la aplicación */
+QLabel#AppTitle {
+    background-color: #005A9E;   /* Barra superior en azul corporativo oscuro */
+    color: #FFFFFF;              /* Texto blanco para contraste */
+    font-size: 16pt;
+    font-weight: bold;
+    padding: 8px 16px;
+    border-bottom: 2px solid #003366;  /* Línea inferior que separa la barra */
+    
+    background-image: url(:/icons/logo_wampy.png);
+    background-position: left center;
+    background-repeat: no-repeat;
+    padding-left: 40px; 
 }
 
 /* Botones */
 QPushButton {
-    background-color: #1976D2;
-    color: white;
+    background-color: #007ACC;   /* Azul base */
+    color: #FFFFFF;
     border: none;
-    padding: 6px 12px;
+    padding: 8px 16px;
     border-radius: 4px;
 }
+
 QPushButton:hover {
-    background-color: #1565C0;
-}
-QPushButton:pressed {
-    background-color: #0D47A1;
+    background-color: #005A9E;   /* Hover: azul más oscuro */
 }
 
-/* GroupBox */
+QPushButton:pressed {
+    background-color: #004A80;   /* Al hacer click */
+}
+
+QPushButton:disabled {
+    background-color: #007ACC;   /* Igual que el normal */
+    color: #FFFFFF;              /* Texto visible */
+}
+
+QPushButton#minimizeButton {
+    background-color: #003366;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    padding: 0px;  /* Anulamos el padding para este botón */
+}
+
+/* GroupBox (secciones agrupadas) */
 QGroupBox {
-    border: 1px solid #90CAF9;
+    background-color: #004A80;        /* Fondo blanco tipo "card" */
+    border: 1px solid #99BFE3;        /* Borde azul claro suave */
     border-radius: 5px;
     margin-top: 10px;
-    background-color: #E3F2FD;
-    padding: 10px;
+    padding: 5px;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top center;
-    padding: 0 3px;
-    color: #0D47A1;
+    padding: 0 5px;
+    color: #333333;
+    font-weight: bold;
+    /* Ejemplo: icono en el título del groupbox 
+       image: url(:/icons/section_icon.png);
+       padding-left: 20px; */
+    background-color: transparent;
+}
+
+/* Pestanas del QTabWidget */
+QTabWidget::pane {
+    background-color: #FFFFFF;        /* Fondo del área de pestañas en blanco */
+    border: 1px solid #99BFE3;        /* Borde azul claro alrededor del contenido */
+    border-radius: 4px;
+    margin-top: -1px;  /* Opcional: solapar ligeramente para unir con pestaña activa */
+}
+QTabBar {
+    font-size: 10pt;  /* Asegura tamaño de fuente consistente */
+}
+QTabBar::tab {
+    background: #E3F2FD;             /* Fondo azul muy claro para pestañas inactivas */
+    color: #333333;
+    border: 1px solid #99BFE3;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding: 6px 12px;
+    margin: 2px;
+    min-width: 90px;
+}
+QTabBar::tab:hover {
+    background: #CCE7FB;             /* Hover en pestaña inactiva (ligeramente más oscuro) */
+}
+QTabBar::tab:selected {
+    background: #FFFFFF;             /* Pestaña activa blanca, unida al pane */
+    color: #333333;
+    border: 1px solid #99BFE3;
+    border-bottom: 1px solid #FFFFFF; /* Fusiona con el fondo del pane (sin borde abajo) */
     font-weight: bold;
 }
 
-/* QTableWidget */
-QTableWidget {
-    background-color: white;
-    alternate-background-color: #E3F2FD;
-    gridline-color: #90CAF9;
+/* MenuBar */
+QMenuBar {
+    background-color: #007ACC;
+    color: #FFFFFF;
 }
-QHeaderView::section {
-    background-color: #1976D2;
-    color: white;
-    padding: 4px;
-    border: 1px solid #90CAF9;
+QMenuBar::item {
+    background: transparent;
+    padding: 4px 8px;
+}
+QMenuBar::item:selected {
+    background-color: #005A9E;
 }
 
-/* QCheckBox */
-QCheckBox {
-    spacing: 5px;
+/* Menús desplegables */
+QMenu {
+    background-color: #FFFFFF;
+    border: 1px solid #99BFE3;
+}
+QMenu::item {
+    padding: 4px 12px;
+}
+QMenu::item:selected {
+    background-color: #E3F2FD;
+}
+
+/* Splash Screen */
+QSplashScreen {
+    background-color: #003366;
+    color: #FFFFFF;
+}
+
+/* Cabeceras de tablas (QTableWidget/QTableView) */
+QHeaderView::section {
+    background-color: #007ACC;   /* Fondo azul corporativo para encabezados */
+    color: #FFFFFF;
+    padding: 4px;
+    border: 1px solid #005A9E;   /* Separadores ligeramente más oscuros */
+    font-weight: bold;
+}
+
+/* TableWidget/TableView general */
+QTableWidget, QTableView {
+    gridline-color: #CCCCCC;
+    background-color: #FFFFFF;
+    alternate-background-color: #F5FAFF;  /* Azul muy claro en filas alternas */
+    selection-background-color: #005A9E;  /* Fondo azul oscuro al seleccionar */
+    selection-color: #FFFFFF;            /* Texto blanco en selección */
+}
+
+/* ScrollArea */
+QScrollArea {
+    border: none;
+    background: transparent;  /* deja ver el fondo por defecto */
+}
+QScrollArea QWidget {  /* widget interno del scroll area */
+    background-color: #FFFFFF;
+}
+
+/* ScrollBars personalizados */
+QScrollBar:horizontal, QScrollBar:vertical {
+    background-color: #E0E0E0;   /* fondo gris claro de la barra */
+    border: none;
+    width: 12px;
+    margin: 0px;
+}
+QScrollBar::handle {
+    background-color: #90CAF9;  /* color azul claro para el handle */
+    border-radius: 6px;
+    min-width: 20px;
+    min-height: 20px;
+}
+QScrollBar::handle:hover {
+    background-color: #64B5F6;  /* al hover, azul un poco más intenso */
+}
+QScrollBar::add-line, QScrollBar::sub-line {
+    background: transparent;
+    border: none;
+    width: 0px;
+    height: 0px;
+}
+QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical,
+QScrollBar::left-arrow:horizontal, QScrollBar::right-arrow:horizontal {
+    background: transparent;
+    image: none;
+}
+
+QPushButton#JsonEditorButton {
+    background-color: #0066B2;
+    color: white;
+    font-weight: bold;
 }

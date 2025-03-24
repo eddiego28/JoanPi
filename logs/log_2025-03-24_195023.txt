@@ -1,0 +1,147 @@
+2025-03-24 19:51:43 - 2025-03-24 19:51:43 | Realm: MsgCrEnt | Topic: default
+{}
+
+
+2025-03-24 19:51:43 - 2025-03-24 19:51:43 | Realm: default | Topic: MsgCrEnt
+{
+  "args": [],
+  "kwargs": {}
+}
+
+
+2025-03-24 19:51:45 - 2025-03-24 19:51:45 | Realm: MsgInitCtr | Topic: default2
+{}
+
+
+2025-03-24 19:52:14 - 2025-03-24 19:52:14 | Realm: MsgEP | Topic: default
+{
+  "EP": {
+    "common": {
+      "palabra1": {
+        "campo1": "valor1",
+        "campo2": "valor2",
+        "detalles": {
+          "subcampo1": "dato1",
+          "subcampo2": 123,
+          "subcampo3": [
+            "item1",
+            "item2",
+            "item3"
+          ]
+        }
+      },
+      "palabra3": {
+        "campo5": "valor5",
+        "campo6": "valor6",
+        "propiedades": {
+          "peso": 75.3,
+          "altura": 1.82,
+          "colores": [
+            "rojo",
+            "verde",
+            "azul"
+          ]
+        }
+      }
+    }
+  }
+}
+
+
+2025-03-24 19:52:14 - 2025-03-24 19:52:14 | Realm: MsgCrEnt | Topic: default
+{}
+
+
+2025-03-24 19:52:14 - 2025-03-24 19:52:14 | Realm: MsgInitCtr | Topic: default2
+{}
+
+
+2025-03-24 19:52:14 - 2025-03-24 19:52:14 | Realm: default | Topic: MsgEP
+{
+  "args": [],
+  "kwargs": {
+    "EP": {
+      "common": {
+        "palabra1": {
+          "campo1": "valor1",
+          "campo2": "valor2",
+          "detalles": {
+            "subcampo1": "dato1",
+            "subcampo2": 123,
+            "subcampo3": [
+              "item1",
+              "item2",
+              "item3"
+            ]
+          }
+        },
+        "palabra3": {
+          "campo5": "valor5",
+          "campo6": "valor6",
+          "propiedades": {
+            "peso": 75.3,
+            "altura": 1.82,
+            "colores": [
+              "rojo",
+              "verde",
+              "azul"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+
+
+2025-03-24 19:52:14 - 2025-03-24 19:52:14 | Realm: default | Topic: MsgCrEnt
+{
+  "args": [],
+  "kwargs": {}
+}
+
+
+2025-03-24 19:52:39 - 2025-03-24 19:52:39 | Realm: MsgCrEnt | Topic: default
+{}
+
+
+2025-03-24 19:52:39 - 2025-03-24 19:52:39 | Realm: default | Topic: MsgCrEnt
+{
+  "args": [],
+  "kwargs": {}
+}
+
+
+2025-03-24 19:52:41 - 2025-03-24 19:52:41 | Realm: MsgInitCtr | Topic: default2
+{}
+
+
+2025-03-24 19:52:41 - 2025-03-24 19:52:41 | Realm: default2 | Topic: MsgInitCtr
+{
+  "args": [],
+  "kwargs": {}
+}
+
+
+2025-03-24 19:53:36 - 2025-03-24 19:53:36 | Realm: MsgEP | Topic: default
+{}
+
+
+2025-03-24 19:53:36 - 2025-03-24 19:53:36 | Realm: default | Topic: MsgEP
+{
+  "args": [],
+  "kwargs": {}
+}
+
+
+2025-03-24 19:53:38 - 2025-03-24 19:53:38 | Realm: MsgInitCtr | Topic: default2
+{}
+
+
+2025-03-24 19:53:38 - 2025-03-24 19:53:38 | Realm: default2 | Topic: MsgInitCtr
+{
+  "args": [],
+  "kwargs": {}
+}
+
+

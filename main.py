@@ -1,7 +1,7 @@
 import sys, os, json, datetime, logging, asyncio, threading
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QToolBar, QAction, QTabWidget, QWidget,
-    QVBoxLayout, QSplashScreen, QMessageBox, QFileDialog
+    QVBoxLayout, QSplashScreen, QMessageBox, QFileDialog, QSplashScreen
 )
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QIcon
@@ -17,17 +17,30 @@ def load_stylesheet(app, stylesheet_path):
 
 def create_splash_screen():
     # Splash screen size
-    width, height = 475, 250
+    width, height = 700, 400
     # Create a pixmap with a pale blue background
     pixmap = QPixmap(width, height)
     pixmap.fill(QColor("#BBDEFB"))
+    
+    icon_path = os.path.join(os.path.dirname(__file__), "icons", "logo_wampy.png")
+    icon = QPixmap(icon_path)
+    if not icon.isNull():
+        # Scale the icon and center it at the top with some margin
+        icon = icon.scaled(350, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        x = (width - icon.width()) // 2
+        y = 110  # top margin
+        painter = QPainter(pixmap)
+        painter.drawPixmap(x, y, icon)
+        painter.end()
+    else:
+        print("Error: Could not load image:", icon_path)
     
     # Load and scale the icon image from "icons/open.png"
     icon_path = os.path.join(os.path.dirname(__file__), "icons", "open.png")
     icon = QPixmap(icon_path)
     if not icon.isNull():
         # Scale the icon and center it at the top with some margin
-        icon = icon.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        icon = icon.scaled(200, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         x = (width - icon.width()) // 2
         y = 20  # top margin
         painter = QPainter(pixmap)
@@ -35,6 +48,8 @@ def create_splash_screen():
         painter.end()
     else:
         print("Error: Could not load image:", icon_path)
+    
+   
     
     splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
     splash.showMessage("<h1 style='color: #003366 ;'>Loading...</h1>", 
@@ -44,7 +59,7 @@ def create_splash_screen():
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("WAMP System: Publisher and Subscriber")
+        self.setWindowTitle("wamPy Tester v1.0 - Publisher and Subscriber Tool")
         self.resize(1000, 800)
         self.initUI()
 
@@ -89,13 +104,15 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    icon_path = os.path.join(os.path.dirname(__file__), "icons", "logo_wampy.png")
+    app.setWindowIcon(QIcon(icon_path))
     stylesheet_path = os.path.join(os.path.dirname(__file__), "estilo.qss")
     load_stylesheet(app, stylesheet_path)
     
     splash = create_splash_screen()
     splash.show()
-    QTimer.singleShot(3000, splash.close)
+    QTimer.singleShot(5000, splash.close)
     
     main_window = MainWindow()
-    QTimer.singleShot(3000, main_window.show)
+    QTimer.singleShot(5000, main_window.show)
     sys.exit(app.exec_())

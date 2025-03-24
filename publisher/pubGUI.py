@@ -232,22 +232,12 @@ class MessageConfigWidget(QWidget):
         headerLayout.addWidget(self.enableCheckBox)
 
         self.minimizeButton = QPushButton("–")
-        self.minimizeButton.setFixedSize(20, 20)
-        self.minimizeButton.setStyleSheet("""
-            QPushButton {
-                background-color: #007ACC;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #005A9E;
-            }
-            QPushButton:pressed {
-                background-color: #004A80;
-            }
-        """)
+        self.minimizeButton.setObjectName("minimizeButton")
+        # Establecemos un tamaño basado en el sizeHint() aumentado
+        size = self.enableCheckBox.sizeHint()
+        self.minimizeButton.setFixedSize(size.width() + 1, size.height())
+
+       
         self.minimizeButton.clicked.connect(self.toggleMinimize)
         headerLayout.addWidget(self.minimizeButton)
 

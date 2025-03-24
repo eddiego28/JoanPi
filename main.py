@@ -20,15 +20,15 @@ def create_splash_screen():
     width, height = 700, 400
     # Create a pixmap with a pale blue background
     pixmap = QPixmap(width, height)
-    pixmap.fill(QColor("#BBDEFB"))
+    pixmap.fill(QColor("#007ACC"))
     
     icon_path = os.path.join(os.path.dirname(__file__), "icons", "logo_wampy.png")
     icon = QPixmap(icon_path)
     if not icon.isNull():
         # Scale the icon and center it at the top with some margin
-        icon = icon.scaled(350, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        icon = icon.scaled(400, 270, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         x = (width - icon.width()) // 2
-        y = 110  # top margin
+        y = 80  # top margin
         painter = QPainter(pixmap)
         painter.drawPixmap(x, y, icon)
         painter.end()
@@ -52,7 +52,7 @@ def create_splash_screen():
    
     
     splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
-    splash.showMessage("<h1 style='color: #003366 ;'>Loading...</h1>", 
+    splash.showMessage("<h1 style='color: #000000 ;'>Loading...</h1>", 
                        Qt.AlignCenter | Qt.AlignBottom, Qt.white)
     return splash
 

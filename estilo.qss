@@ -72,6 +72,16 @@ QGroupBox::title {
     background-color: transparent;
 }
 
+QPushButton#minimizeButton {
+    background-color: #007ACC;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    padding: 0px;  /* Anulamos el padding para este botón */
+}
+
+
 /* Pestanas del QTabWidget */
 QTabWidget::pane {
     background-color: #FFFFFF;        /* Fondo del área de pestañas en blanco */

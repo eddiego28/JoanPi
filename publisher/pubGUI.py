@@ -46,7 +46,7 @@ def load_realm_topic_config():
 load_realm_topic_config()
 
 ################################################################################
-# Global dictionary for publisher sessions (one per realm)
+# Global dictionary for publisher sessions (one per realm) to reuse them
 ###############################################################################
 global_pub_sessions = {}  # key: realm, value: session object
 

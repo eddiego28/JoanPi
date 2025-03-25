@@ -334,7 +334,7 @@ class SubscriberTab(QWidget):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                # Aceptar tanto array como dict
+                # Aceptar tanto array como dict para "realms"
                 if isinstance(data.get("realms"), list):
                     new_dict = {}
                     for item in data["realms"]:

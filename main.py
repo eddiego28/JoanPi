@@ -116,7 +116,7 @@ if __name__ == "__main__":
     if splash:
         splash.show()
 
-    # Mostrar ventana principal después del splash
+    # Mostrar ventana principal después del splash screen
     main_window = MainWindow()
     QTimer.singleShot(5000, splash.close)
     QTimer.singleShot(5000, main_window.show)

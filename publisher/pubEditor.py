@@ -58,7 +58,7 @@ class PublisherEditorWidget(QWidget):
         """)
         jsonLayout.addWidget(loadJsonButton)
         self.jsonPreview = QPlainTextEdit()
-        self.jsonPreview.setPlainText("{}")
+        self.jsonPreview.setPlainText("{}") 
         self.jsonPreview.setMinimumHeight(350)
         self.jsonPreview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         jsonLayout.addWidget(self.jsonPreview)

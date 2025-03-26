@@ -16,13 +16,25 @@ from .pubEditor import PublisherEditorWidget
 ###############################################################################
 REALMS_CONFIG = {}
 
+def get_resource_path(relative_path):
+    """Obtiene la ruta absoluta del recurso, compatible con PyInstaller."""
+    if getattr(sys, 'frozen', False):
+        # Estamos en .exe
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # Estamos en .py
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
 def load_realm_topic_config():
     global REALMS_CONFIG
     try:
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(base_path, "..", "config", "realm_topic_config_pub.json")
+        # Ruta al archivo config/realm_topic_config_pub.json
+        config_path = get_resource_path(os.path.join("config", "realm_topic_config_pub.json"))
+        
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
+
         if isinstance(config.get("realms"), list):
             new_dict = {}
             for realm_info in config.get("realms", []):
@@ -34,19 +46,27 @@ def load_realm_topic_config():
             REALMS_CONFIG = new_dict
         else:
             REALMS_CONFIG = config.get("realms", {})
-        print("Realms and topics configuration loaded from", config_path)
+
+        print("✅ Realms and topics configuration loaded from:", config_path)
+
     except Exception as e:
-        print("Error loading configuration:", e)
+        print("❌ Error loading configuration:", e)
         REALMS_CONFIG = {
             "default": {"router_url": "ws://127.0.0.1:60001", "topics": ["MsgEP", "MsgCrEnt"]},
             "default2": {"router_url": "ws://127.0.0.1:60002", "topics": ["MsgInitCtr", "MsgAlerts"]}
         }
-        print("Using default configuration.")
+        print("⚠️ Using default configuration.")
 
+# Cargar al iniciar
 load_realm_topic_config()
 
+<<<<<<< Updated upstream
 ################################################################################
 # Global dictionary for publisher sessions (one per realm) to reuse them
+=======
+###############################################################################
+# Global dictionary for publisher sessions (one per realm)
+>>>>>>> Stashed changes
 ###############################################################################
 global_pub_sessions = {}  # key: realm, value: session object
 

@@ -328,13 +328,25 @@ class SubscriberTab(QWidget):
     # -------------------------------------------------------------------------
     # Cargar la configuración global de realms/topics
     # -------------------------------------------------------------------------
+    def get_config_path(filename):
+        """Devuelve la ruta absoluta del archivo de configuración."""
+        if getattr(sys, 'frozen', False):
+            # Si está empaquetado como .exe
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # Si está ejecutándose como script .py
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(base_path, "config", filename)
+
     def loadGlobalRealmTopicConfig(self):
-        config_path = os.path.join(os.path.dirname(__file__), "..", "config", "realm_topic_config.json")
+        config_path = self.get_config_path("realm_topic_config.json")
+        
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                # Aceptar tanto array como dict para "realms"
+                
+                # Aceptar tanto lista como diccionario
                 if isinstance(data.get("realms"), list):
                     new_dict = {}
                     for item in data["realms"]:
@@ -346,12 +358,14 @@ class SubscriberTab(QWidget):
                     self.realms_topics = new_dict
                 else:
                     self.realms_topics = data.get("realms", {})
-                print("Global realms/topics configuration loaded (subscriber).")
+
+                print("✅ Global realms/topics configuration loaded (subscriber).")
                 self.populateRealmTable()
+
             except Exception as e:
-                QMessageBox.critical(self, "Error", f" The file realm_topic_config.json could not be loaded:\n{e} ")
+                QMessageBox.critical(self, "Error", f" The file realm_topic_config.json could not be loaded:\n{e}")
         else:
-            QMessageBox.warning(self, "Warning", "File realm_topic_config.json not found.")
+            QMessageBox.warning(self, "Warning", " File realm_topic_config.json not found.")
 
     # -------------------------------------------------------------------------
     # Rellenar la tabla de realms

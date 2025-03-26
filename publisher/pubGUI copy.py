@@ -50,12 +50,12 @@ def load_realm_topic_config():
         print("✅ Realms and topics configuration loaded from:", config_path)
 
     except Exception as e:
-        print("❌ Error loading configuration:", e)
+        print("Error loading configuration:", e)
         REALMS_CONFIG = {
             "default": {"router_url": "ws://127.0.0.1:60001", "topics": ["MsgEP", "MsgCrEnt"]},
             "default2": {"router_url": "ws://127.0.0.1:60002", "topics": ["MsgInitCtr", "MsgAlerts"]}
         }
-        print("⚠️ Using default configuration.")
+        print("Using default configuration.")
 
 # Cargar al iniciar
 load_realm_topic_config()

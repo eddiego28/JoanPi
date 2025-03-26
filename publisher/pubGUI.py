@@ -29,7 +29,7 @@ def get_resource_path(relative_path):
 def load_realm_topic_config():
     global REALMS_CONFIG
     try:
-        # Ruta al archivo config/realm_topic_config_pub.json
+        # Ruta al archivo config/realm_topic_config_pub.json en el directorio de recursos
         config_path = get_resource_path(os.path.join("config", "realm_topic_config_pub.json"))
         
         with open(config_path, "r", encoding="utf-8") as f:

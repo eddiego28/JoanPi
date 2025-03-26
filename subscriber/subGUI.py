@@ -110,7 +110,7 @@ class JsonTreeDialog(QDialog):
             parent.addChild(item)
 
 ###############################################################################
-# SubscriberMessageViewer: visor de mensajes recibidos (QTable)
+# SubscriberMessageViewer: visor de mensajes recibidos (QTable) y detalles (QDialog)
 ###############################################################################
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):

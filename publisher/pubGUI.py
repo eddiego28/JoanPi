@@ -60,13 +60,8 @@ def load_realm_topic_config():
 # Cargar al iniciar
 load_realm_topic_config()
 
-<<<<<<< Updated upstream
-################################################################################
-# Global dictionary for publisher sessions (one per realm) to reuse them
-=======
 ###############################################################################
 # Global dictionary for publisher sessions (one per realm)
->>>>>>> Stashed changes
 ###############################################################################
 global_pub_sessions = {}  # key: realm, value: session object
 

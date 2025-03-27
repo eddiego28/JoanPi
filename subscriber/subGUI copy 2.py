@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import QTreeWidgetItem
 
 ###############################################################################
 # Diccionario global para almacenar las sesiones activas (una por realm)
-###############################################################################
+################################################################################
 global_sub_sessions = {}  # key: realm, value: session object
 
 ###############################################################################
@@ -19,8 +19,7 @@ global_sub_sessions = {}  # key: realm, value: session object
 ###############################################################################
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
-        # Usamos la sintaxis clásica para compatibilidad
-        super(MultiTopicSubscriber, self).__init__(config)
+        super().__init__(config)
         self.topics = []  # Se asignan antes de iniciar la sesión
         self.on_message_callback = None
 
@@ -28,8 +27,7 @@ class MultiTopicSubscriber(ApplicationSession):
         realm_name = self.config.realm
         global global_sub_sessions
         global_sub_sessions[realm_name] = self
-        print("Suscriptor connected to realm: {}".format(realm_name))
-        # En Autobahn 18.10.1 es compatible usar async/await con asyncio
+        print(f"Suscriptor connected to realm: {realm_name}")
         for t in self.topics:
             await self.subscribe(
                 lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
@@ -58,13 +56,12 @@ def start_subscriber(url, realm, topics, on_message_callback):
     if realm in global_sub_sessions:
         try:
             global_sub_sessions[realm].leave("Re-subscribing with new topics")
-            print("Previous session for realm '{}' closed.".format(realm))
+            print(f"Previous session for realm '{realm}' closed.")
         except Exception as e:
             print("Error previous session:", e)
         del global_sub_sessions[realm]
 
     def run():
-        # Creamos un nuevo event loop para esta hebra
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         runner = ApplicationRunner(url=url, realm=realm)
@@ -76,7 +73,7 @@ def start_subscriber(url, realm, topics, on_message_callback):
 ###############################################################################
 class JsonTreeDialog(QDialog):
     def __init__(self, data, parent=None):
-        super(JsonTreeDialog, self).__init__(parent)
+        super().__init__(parent)
         self.setWindowTitle("JSON detail - Tree View")
         self.resize(600, 400)
         layout = QVBoxLayout(self)
@@ -117,7 +114,7 @@ class JsonTreeDialog(QDialog):
 ###############################################################################
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
-        super(SubscriberMessageViewer, self).__init__(parent)
+        super().__init__(parent)
         self.messages = []  # Almacenamos los datos parseados (dict)
         self.initUI()
 
@@ -164,7 +161,7 @@ class SubscriberTab(QWidget):
     messageReceived = pyqtSignal(str, str, str, object)  # (realm, topic, timestamp, data_dict)
 
     def __init__(self, parent=None):
-        super(SubscriberTab, self).__init__(parent)
+        super().__init__(parent)
         self.realms_topics = {}          # Se carga desde el archivo de configuración
         self.selected_topics_by_realm = {}
         self.current_realm = None
@@ -248,6 +245,7 @@ class SubscriberTab(QWidget):
                 font-weight: bold;
             }
         """)
+        # Aquí se conecta al nuevo método que pregunta si se desea detener la suscripción anterior
         self.btnSubscribe.clicked.connect(self.confirmAndStartSubscription)
         ctrlLayout.addWidget(self.btnSubscribe)
 
@@ -330,12 +328,13 @@ class SubscriberTab(QWidget):
     # -------------------------------------------------------------------------
     # Cargar la configuración global de realms/topics
     # -------------------------------------------------------------------------
-    # NOTA: Se recomienda definir la función get_config_path fuera de la clase para evitar problemas de indentación.
     def get_config_path(filename):
         """Devuelve la ruta absoluta del archivo de configuración."""
         if getattr(sys, 'frozen', False):
+            # Si está empaquetado como .exe
             base_path = os.path.dirname(sys.executable)
         else:
+            # Si está ejecutándose como script .py
             base_path = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(base_path, "config", filename)
 
@@ -508,10 +507,10 @@ class SubscriberTab(QWidget):
                     }
                     details = json.dumps(sub_info, indent=2, ensure_ascii=False)
                     self.viewer.add_message(realm, ", ".join(selected_topics), timestamp, details)
-                    print("Subscribed to Realm '{}' with topics {}".format(realm, selected_topics))
+                    print(f"Subscribed to Realm '{realm}' with topics {selected_topics}")
                     sys.stdout.flush()
                 else:
-                    QMessageBox.warning(self, "Warning", "There are no topics selected for the realm '{}'.".format(realm))
+                    QMessageBox.warning(self, "Warning", f"There are no topics selected for the realm '{realm}'.")
 
     # -------------------------------------------------------------------------
     # Método para preguntar si se desea detener la suscripción anterior
@@ -539,7 +538,7 @@ class SubscriberTab(QWidget):
         for realm, session_obj in list(global_sub_sessions.items()):
             try:
                 session_obj.leave("Stop subscription requested")
-                print("Subscription stopped for realm '{}'.".format(realm))
+                print(f"Subscription stopped for realm '{realm}'.")
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.viewer.add_message(realm, "Stopped", timestamp, "Subscription stopped successfully.")
             except Exception as e:
@@ -553,7 +552,7 @@ class SubscriberTab(QWidget):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.messageReceived.emit(realm, topic, timestamp, content)
         log_to_file(timestamp, realm, topic, json.dumps(content, indent=2, ensure_ascii=False))
-        print("Message received in '{}', topic '{}' at {}".format(realm, topic, timestamp))
+        print(f"Message received in '{realm}', topic '{topic}' at {timestamp}")
         sys.stdout.flush()
 
     @pyqtSlot(str, str, str, object)

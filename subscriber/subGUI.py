@@ -1,15 +1,16 @@
-import os, json, datetime, asyncio, threading, sys, time
-from functools import partial
+import os, json, datetime, threading, sys, time
+from twisted.internet.defer import inlineCallbacks
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
     QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QCheckBox, QTreeWidgetItem
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
-from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
+from autobahn.wamp import types
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 
-# Monkey-patch para time.clock en Python 3.8+
+# Si estás en Python 3.8+ y Autobahn 0.10.2, puede que necesites monkey-patch:
 if not hasattr(time, "clock"):
     time.clock = time.perf_counter
 
@@ -19,35 +20,47 @@ if not hasattr(time, "clock"):
 global_sub_sessions = {}  # key: realm, value: session object
 
 ###############################################################################
-# MultiTopicSubscriber: sesión WAMP para suscripción (adaptada para Autobahn 18.10.1)
+# MultiTopicSubscriber: sesión WAMP para suscripción (adaptada para Autobahn 0.10.x)
 ###############################################################################
 class MultiTopicSubscriber(ApplicationSession):
-    def __init__(self, config):
+    def __init__(self, config=None):
+        """
+        En Autobahn 0.10.2, normalmente se usa config de tipo ComponentConfig.
+        Si no se pasa, se puede dejar en None o crear un objeto manual.
+        """
         super(MultiTopicSubscriber, self).__init__(config)
-        self.topics = []  # Los topics se asignan antes de iniciar la sesión
+        self.topics = []  # Se asignan antes de iniciar la sesión
         self.on_message_callback = None
 
-    async def onJoin(self, details):
+    @inlineCallbacks
+    def onJoin(self, details):
         realm_name = self.config.realm
         global global_sub_sessions
         global_sub_sessions[realm_name] = self
         print("Suscriptor connected to realm: {}".format(realm_name))
-        # Se utiliza functools.partial en lugar de lambda para capturar correctamente el topic
+
+        # Suscribimos a cada topic usando yield (Twisted) en vez de async/await
         for t in self.topics:
             try:
-                callback = partial(self.on_event, realm_name, t)
-                await self.subscribe(callback, t)
+                yield self.subscribe(
+                    lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
+                    t
+                )
                 print("Subscribed to topic: {}".format(t))
             except Exception as e:
                 print("Error subscribing to topic {}: {}".format(t, e))
 
     def on_event(self, realm, topic, *args, **kwargs):
+        # Simple callback que empaqueta args y kwargs
         message_data = {"args": args, "kwargs": kwargs}
         if self.on_message_callback:
             self.on_message_callback(realm, topic, message_data)
 
     @classmethod
     def factory(cls, topics, on_message_callback):
+        """
+        Factoría para crear la sesión con los topics y callback asignados.
+        """
         def create_session(config):
             session = cls(config)
             session.topics = topics
@@ -65,14 +78,14 @@ def start_subscriber(url, realm, topics, on_message_callback):
             global_sub_sessions[realm].leave("Re-subscribing with new topics")
             print("Previous session for realm '{}' closed.".format(realm))
         except Exception as e:
-            print("Error closing previous session:", e)
+            print("Error previous session:", e)
         del global_sub_sessions[realm]
 
     def run():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # En Autobahn 0.10.2 se usa Twisted, no asyncio
         runner = ApplicationRunner(url=url, realm=realm)
         runner.run(MultiTopicSubscriber.factory(topics, on_message_callback))
+
     threading.Thread(target=run, daemon=True).start()
 
 ###############################################################################
@@ -117,7 +130,7 @@ class JsonTreeDialog(QDialog):
             parent.addChild(item)
 
 ###############################################################################
-# SubscriberMessageViewer: visor de mensajes recibidos (QTable) y detalles (QDialog)
+# SubscriberMessageViewer: visor de mensajes recibidos (QTable)
 ###############################################################################
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
@@ -169,11 +182,10 @@ class SubscriberTab(QWidget):
 
     def __init__(self, parent=None):
         super(SubscriberTab, self).__init__(parent)
-        self.realms_topics = {}          # Se carga desde el archivo de configuración
+        self.realms_topics = {}
         self.selected_topics_by_realm = {}
         self.current_realm = None
 
-        # Checkboxes "All Realms" y "All Topics"
         self.checkAllRealms = QCheckBox("All Realms")
         self.checkAllRealms.stateChanged.connect(self.toggleAllRealms)
         self.checkAllTopics = QCheckBox("All Topics")
@@ -185,11 +197,9 @@ class SubscriberTab(QWidget):
 
     def initUI(self):
         mainLayout = QHBoxLayout(self)
-
-        # Panel izquierdo: Realms y Topics
         leftLayout = QVBoxLayout()
 
-        # Checkbox global para Realms
+        # Checkboxes globales
         topCtrlLayoutRealms = QHBoxLayout()
         topCtrlLayoutRealms.addWidget(self.checkAllRealms)
         leftLayout.addLayout(topCtrlLayoutRealms)
@@ -203,7 +213,6 @@ class SubscriberTab(QWidget):
         self.realmTable.itemChanged.connect(self.onRealmItemChanged)
         leftLayout.addWidget(self.realmTable)
 
-        # Botones para Realms
         realmBtnsLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("New Realm")
@@ -216,7 +225,6 @@ class SubscriberTab(QWidget):
         realmBtnsLayout.addWidget(self.btnDelRealm)
         leftLayout.addLayout(realmBtnsLayout)
 
-        # Checkbox global para Topics
         topCtrlLayoutTopics = QHBoxLayout()
         topCtrlLayoutTopics.addWidget(self.checkAllTopics)
         leftLayout.addLayout(topCtrlLayoutTopics)
@@ -229,7 +237,6 @@ class SubscriberTab(QWidget):
         self.topicTable.itemChanged.connect(self.onTopicChanged)
         leftLayout.addWidget(self.topicTable)
 
-        # Botones para Topics
         topicBtnsLayout = QHBoxLayout()
         self.newTopicEdit = QLineEdit()
         self.newTopicEdit.setPlaceholderText("New Topic")
@@ -242,7 +249,6 @@ class SubscriberTab(QWidget):
         topicBtnsLayout.addWidget(self.btnDelTopic)
         leftLayout.addLayout(topicBtnsLayout)
 
-        # Botones de control: Suscribirse, Detener Suscripción y Reset Log
         ctrlLayout = QHBoxLayout()
         self.btnSubscribe = QPushButton("Subscribe")
         self.btnSubscribe.setStyleSheet("""
@@ -278,10 +284,9 @@ class SubscriberTab(QWidget):
         ctrlLayout.addWidget(self.btnReset)
 
         leftLayout.addLayout(ctrlLayout)
-
         mainLayout.addLayout(leftLayout, stretch=1)
 
-        # Panel derecho: Visor de mensajes
+        # Panel derecho: visor de mensajes
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         self.setLayout(mainLayout)
@@ -310,7 +315,7 @@ class SubscriberTab(QWidget):
             else:
                 self.selected_topics_by_realm[self.current_realm] = set()
 
-    # Función para obtener la ruta del archivo de configuración
+    # Ruta al config
     def get_config_path(filename):
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)

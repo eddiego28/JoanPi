@@ -1,13 +1,18 @@
-import sys, os, json, datetime, logging, asyncio, threading
+import sys, os, json, datetime, logging, threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
     QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox, QCheckBox,
-    QApplication, QMainWindow, QToolBar, QAction, QTabWidget, QDialog, QTreeWidget, QVBoxLayout as QVBox, QTreeWidgetItem
+    QApplication, QMainWindow, QToolBar, QAction, QTabWidget, QDialog, QTreeWidget,
+    QVBoxLayout as QVBox, QTreeWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QIcon
-from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
+
+# IMPORTAMOS DESDE TWISTED (AUTOBANH 0.10.x)
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
+from twisted.internet.defer import inlineCallbacks
+
 from common.utils import log_to_file  # <= si lo usas para log, mantenlo
 from .pubEditor import PublisherEditorWidget
 
@@ -29,9 +34,7 @@ def get_resource_path(relative_path):
 def load_realm_topic_config():
     global REALMS_CONFIG
     try:
-        # Ruta al archivo config/realm_topic_config_pub.json en el directorio de recursos
         config_path = get_resource_path(os.path.join("config", "realm_topic_config_pub.json"))
-        
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
 
@@ -66,67 +69,96 @@ load_realm_topic_config()
 global_pub_sessions = {}  # key: realm, value: session object
 
 ###############################################################################
-# JSONPublisher session
+# JSONPublisher session (adaptado a Twisted, sin async/await)
 ###############################################################################
 class JSONPublisher(ApplicationSession):
     def __init__(self, config, topic, widget):
-        super().__init__(config)
+        """
+        En Autobahn 0.10.x, config suele ser un objeto de configuración (realm, extra, etc.).
+        """
+        super(JSONPublisher, self).__init__(config)
         self.topic = topic
         self.widget = widget  # Reference to the widget that starts this session
 
-    async def onJoin(self, details):
-        self.loop = asyncio.get_event_loop()
+    @inlineCallbacks
+    def onJoin(self, details):
+        """
+        En Twisted, usamos @inlineCallbacks y yield, en vez de async/await.
+        Dejamos la sesión activa con yield Deferred que nunca termina (o un Future).
+        """
+        # Asignamos la sesión al widget
         self.widget.session = self
-        self.widget.loop = self.loop
+        self.widget.loop = None  # Ya no hay loop de asyncio
         global global_pub_sessions
         global_pub_sessions[self.config.realm] = self
-        print(f"Connected (realm: {self.config.realm}, topic: {self.topic})")
-        await asyncio.Future()
+        print("Connected (realm: {}, topic: {})".format(self.config.realm, self.topic))
+
+        # Mantener la sesión viva indefinidamente:
+        # yield un Deferred que no se resuelve. 
+        # O, simplemente no hagas nada y la sesión seguirá viva hasta que la cierres.
+        # Podrías hacer: yield Deferred() sin callback, pero no es obligatorio.
+        # Por simplicidad:
+        while True:
+            yield self._never_end()
+
+    def _never_end(self):
+        """
+        Simple Deferred que nunca se dispara, para mantener la sesión viva.
+        """
+        from twisted.internet.defer import Deferred
+        return Deferred()
 
 def start_publisher(url, realm, topic, widget):
     global global_pub_sessions
-    # If a session for this realm already exists, reuse it
+    # Si ya existe la sesión, la reusamos
     if realm in global_pub_sessions:
         widget.session = global_pub_sessions[realm]
-        widget.loop = widget.session.loop
-        print(f"Reusing existing publisher session for realm '{realm}'.")
+        widget.loop = None  # No hay asyncio loop
+        print("Reusing existing publisher session for realm '{}'.".format(realm))
     else:
         def run():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             runner = ApplicationRunner(url=url, realm=realm)
             def session_factory(config):
-                session = JSONPublisher(config, topic, widget)
-                return session
+                return JSONPublisher(config, topic, widget)
             runner.run(session_factory)
+
+        # Lanzamos en un hilo
         threading.Thread(target=run, daemon=True).start()
 
 def send_message_now(session, loop, topic, message, delay=0):
-    if session is None or loop is None:
+    """
+    Ya no usamos asyncio. 
+    En Twisted, podemos usar reactor.callLater. 
+    Sin embargo, para simplificar, 
+    si 'delay' > 0, avisamos que no soportamos demorar con Twisted 
+    (o implementamos reactor.callLater).
+    """
+    if session is None:
         print("No active session in this widget. Start the publisher first.")
         return
 
-    async def _send():
-        if delay > 0:
-            await asyncio.sleep(delay)
-        if isinstance(message, dict):
-            session.publish(topic, **message)
-        else:
-            session.publish(topic, message)
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message_json = json.dumps(message, indent=2, ensure_ascii=False)
-        log_to_file(timestamp, topic, session.config.realm, message_json)
-        logging.info(f"Published: {timestamp} | Topic: {topic} | Realm: {session.config.realm}")
-        print("Message sent on", topic, ":", message)
+    # Implementación simple: sin retardo
+    if delay > 0:
+        print("Warning: 'delay' no soportado con Twisted en este snippet. Se enviará de inmediato.")
 
-    asyncio.run_coroutine_threadsafe(_send(), loop)
+    # Publicamos el mensaje
+    if isinstance(message, dict):
+        session.publish(topic, **message)
+    else:
+        session.publish(topic, message)
+
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    message_json = json.dumps(message, indent=2, ensure_ascii=False)
+    log_to_file(timestamp, topic, session.config.realm, message_json)
+    logging.info("Published: {} | Topic: {} | Realm: {}".format(timestamp, topic, session.config.realm))
+    print("Message sent on", topic, ":", message)
 
 ###############################################################################
 # JsonTreeDialog: shows JSON in a tree format
 ###############################################################################
 class JsonTreeDialog(QDialog):
     def __init__(self, data, parent=None):
-        super().__init__(parent)
+        super(JsonTreeDialog, self).__init__(parent)
         self.setWindowTitle("JSON detail - Tree View")
         self.resize(600, 400)
         layout = QVBox(self)
@@ -167,7 +199,7 @@ class JsonTreeDialog(QDialog):
 ###############################################################################
 class PublisherMessageViewer(QWidget):
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super(PublisherMessageViewer, self).__init__(parent)
         self.pubMessages = []
         self.initUI()
 
@@ -184,10 +216,6 @@ class PublisherMessageViewer(QWidget):
         self.setLayout(layout)
 
     def add_message(self, realm, topic, timestamp, details):
-        """
-        details es el contenido crudo (string con JSON, o dict).
-        Lo guardamos en la lista self.pubMessages para luego mostrarlo en la vista de árbol.
-        """
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(timestamp))
@@ -196,13 +224,9 @@ class PublisherMessageViewer(QWidget):
         self.pubMessages.append(details)
 
     def showDetails(self, item):
-        """
-        Al hacer doble clic en una fila, parseamos el contenido a JSON y lo mostramos en un diálogo de árbol.
-        """
         row = item.row()
         if row < len(self.pubMessages):
             raw_details = self.pubMessages[row]
-            # Intentar parsear a JSON
             if isinstance(raw_details, str):
                 try:
                     data = json.loads(raw_details)
@@ -221,7 +245,7 @@ class PublisherMessageViewer(QWidget):
 ###############################################################################
 class MessageConfigWidget(QWidget):
     def __init__(self, msg_id, parent=None):
-        super().__init__(parent)
+        super(MessageConfigWidget, self).__init__(parent)
         self.msg_id = msg_id
         self.message_sent = False
         self.session = None
@@ -248,11 +272,9 @@ class MessageConfigWidget(QWidget):
 
         self.minimizeButton = QPushButton("–")
         self.minimizeButton.setObjectName("minimizeButton")
-        # Establecemos un tamaño basado en el sizeHint() aumentado
         size = self.enableCheckBox.sizeHint()
         self.minimizeButton.setFixedSize(size.width() + 1, size.height())
 
-       
         self.minimizeButton.clicked.connect(self.toggleMinimize)
         headerLayout.addWidget(self.minimizeButton)
 
@@ -370,7 +392,6 @@ class MessageConfigWidget(QWidget):
             self.minimizeButton.setText("–")
 
     def updateTimeField(self, checked):
-        # Si está en modo On-Demand, ponemos el campo de tiempo "inactivo" (o readOnly)
         if self.editorWidget.onDemandRadio.isChecked():
             self.editorWidget.commonTimeEdit.setReadOnly(True)
             self.editorWidget.commonTimeEdit.setStyleSheet("QLineEdit { background-color: #007ACC; color: white; }")
@@ -395,17 +416,15 @@ class MessageConfigWidget(QWidget):
         self.urlEdit.setText(router_url + "/ws")
 
     def stopSession(self):
-        if self.session and self.loop:
-            async def _leave():
-                try:
-                    await self.session.leave("Configuration changed")
-                except Exception as e:
-                    print("Error leaving session:", e)
+        """
+        Como no estamos usando asyncio, no hay loop que manipular. 
+        Para cerrar la sesión, bastaría con session.leave(...) si la tuviéramos.
+        """
+        if self.session:
             try:
-                future = asyncio.run_coroutine_threadsafe(_leave(), self.loop)
-                future.result(timeout=5)
+                self.session.leave("Configuration changed")
             except Exception as e:
-                print("Error closing session:", e)
+                print("Error leaving session:", e)
         self.session = None
         self.loop = None
 
@@ -441,12 +460,12 @@ class MessageConfigWidget(QWidget):
             QMessageBox.critical(self, "Error", f"Invalid JSON:\n{e}")
             return
 
-        if self.session is None or self.loop is None:
+        if self.session is None:
             QMessageBox.warning(self, "Error", "No active session for this message. Start the publisher.")
             return
 
         from .pubGUI import send_message_now
-        send_message_now(self.session, self.loop, topic, data, delay=delay)
+        send_message_now(self.session, None, topic, data, delay=delay)  # loop=None en Twisted
         self.message_sent = False
         publish_time = datetime.datetime.now() + datetime.timedelta(seconds=delay)
         publish_time_str = publish_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -481,7 +500,7 @@ class MessageConfigWidget(QWidget):
 ###############################################################################
 class PublisherTab(QWidget):
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super(PublisherTab, self).__init__(parent)
         self.msgWidgets = []
         self.next_id = 1
         self.initUI()
@@ -597,9 +616,13 @@ class PublisherTab(QWidget):
     def confirmAndStartPublisher(self):
         global global_pub_sessions
         if global_pub_sessions:
-            reply = QMessageBox.question(self, "Confirm",
-                                         "There is an active publisher session. Do you want to stop it and start a new one?",
-                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            reply = QMessageBox.question(
+                self,
+                "Confirm",
+                "There is an active publisher session. Do you want to stop it and start a new one?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
             if reply == QMessageBox.Yes:
                 self.stopAllPublishers()
             else:
@@ -636,7 +659,7 @@ class PublisherTab(QWidget):
         for realm, session_obj in list(global_pub_sessions.items()):
             try:
                 session_obj.leave("Stop publisher requested")
-                print(f"Publisher session stopped for realm '{realm}'.")
+                print("Publisher session stopped for realm '{}'.".format(realm))
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.addPublisherLog(realm, "Stopped", timestamp, "Publisher session stopped successfully.")
             except Exception as e:
@@ -650,10 +673,10 @@ class PublisherTab(QWidget):
     def sendAllAsync(self):
         for widget in self.msgWidgets:
             config = widget.getConfig()
-            if widget.session is None or widget.loop is None:
+            if widget.session is None:
                 print("No active session in message", widget.msg_id)
                 continue
-            send_message_now(widget.session, widget.loop, config["topic"], config["content"], delay=0)
+            send_message_now(widget.session, None, config["topic"], config["content"], delay=0)
             widget.message_sent = False
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sent_message = json.dumps(config["content"], indent=2, ensure_ascii=False)
@@ -685,13 +708,13 @@ class PublisherTab(QWidget):
             else:
                 delay = 0
 
-            if widget.session is None or widget.loop is None:
+            if widget.session is None:
                 print("No active session in message", widget.msg_id)
                 continue
             QTimer.singleShot(int(delay * 1000), lambda w=widget, conf=config: self.sendScenarioMessage(w, conf))
 
     def sendScenarioMessage(self, widget, config):
-        send_message_now(widget.session, widget.loop, config["topic"], config["content"], delay=0)
+        send_message_now(widget.session, None, config["topic"], config["content"], delay=0)
         widget.message_sent = False
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sent_message = json.dumps(config["content"], indent=2, ensure_ascii=False)

@@ -9,7 +9,7 @@ from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 
-# Monkey-patch para time.clock en Python 3.8+
+# Monkey-patch para time.clock en Python 3.8+ (necesario para código antiguo en Crossbar/Autobahn)
 if not hasattr(time, "clock"):
     time.clock = time.perf_counter
 
@@ -19,12 +19,12 @@ if not hasattr(time, "clock"):
 global_sub_sessions = {}  # key: realm, value: session object
 
 ###############################################################################
-# MultiTopicSubscriber: sesión WAMP para suscripción
+# MultiTopicSubscriber: sesión WAMP para suscripción (adaptada para Crossbar 0.x)
 ###############################################################################
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config):
         super(MultiTopicSubscriber, self).__init__(config)
-        self.topics = []  # Se asignan antes de iniciar la sesión
+        self.topics = []  # Los topics se asignan antes de iniciar la sesión
         self.on_message_callback = None
 
     async def onJoin(self, details):
@@ -32,7 +32,7 @@ class MultiTopicSubscriber(ApplicationSession):
         global global_sub_sessions
         global_sub_sessions[realm_name] = self
         print("Suscriptor connected to realm: {}".format(realm_name))
-        # Se usa functools.partial para capturar correctamente el topic
+        # Se utiliza functools.partial para capturar el valor de 't' en cada iteración
         for t in self.topics:
             try:
                 callback = partial(self.on_event, realm_name, t)
@@ -43,6 +43,11 @@ class MultiTopicSubscriber(ApplicationSession):
 
     def on_event(self, realm, topic, *args, **kwargs):
         message_data = {"args": args, "kwargs": kwargs}
+        # Verificar que el payload sea JSON serializable
+        try:
+            json.dumps(message_data)
+        except Exception as ser_err:
+            print("Error serializing payload for topic '{}': {}".format(topic, ser_err))
         if self.on_message_callback:
             self.on_message_callback(realm, topic, message_data)
 
@@ -65,7 +70,7 @@ def start_subscriber(url, realm, topics, on_message_callback):
             global_sub_sessions[realm].leave("Re-subscribing with new topics")
             print("Previous session for realm '{}' closed.".format(realm))
         except Exception as e:
-            print("Error previous session:", e)
+            print("Error closing previous session:", e)
         del global_sub_sessions[realm]
 
     def run():

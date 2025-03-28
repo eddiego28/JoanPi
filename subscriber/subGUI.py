@@ -7,7 +7,9 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.wamp import types
-from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
+# Importamos desde twisted:
+from autobahn.twisted.wamp import ApplicationSession
+from autobahn.twisted.websocket import WebSocketClientFactory, connectWS
 from common.utils import log_to_file, JsonDetailDialog
 
 # Si estás en Python 3.8+ y Autobahn 0.10.2, puede que necesites monkey-patch:
@@ -25,8 +27,7 @@ global_sub_sessions = {}  # key: realm, value: session object
 class MultiTopicSubscriber(ApplicationSession):
     def __init__(self, config=None):
         """
-        En Autobahn 0.10.2, normalmente se usa config de tipo ComponentConfig.
-        Si no se pasa, se puede dejar en None o crear un objeto manual.
+        En Autobahn 0.10.2 se espera un objeto de configuración (ComponentConfig).
         """
         super(MultiTopicSubscriber, self).__init__(config)
         self.topics = []  # Se asignan antes de iniciar la sesión
@@ -38,8 +39,6 @@ class MultiTopicSubscriber(ApplicationSession):
         global global_sub_sessions
         global_sub_sessions[realm_name] = self
         print("Suscriptor connected to realm: {}".format(realm_name))
-
-        # Suscribimos a cada topic usando yield (Twisted) en vez de async/await
         for t in self.topics:
             try:
                 yield self.subscribe(
@@ -51,16 +50,12 @@ class MultiTopicSubscriber(ApplicationSession):
                 print("Error subscribing to topic {}: {}".format(t, e))
 
     def on_event(self, realm, topic, *args, **kwargs):
-        # Simple callback que empaqueta args y kwargs
         message_data = {"args": args, "kwargs": kwargs}
         if self.on_message_callback:
             self.on_message_callback(realm, topic, message_data)
 
     @classmethod
     def factory(cls, topics, on_message_callback):
-        """
-        Factoría para crear la sesión con los topics y callback asignados.
-        """
         def create_session(config):
             session = cls(config)
             session.topics = topics
@@ -69,24 +64,31 @@ class MultiTopicSubscriber(ApplicationSession):
         return create_session
 
 ###############################################################################
-# start_subscriber: inicia una sesión para cada realm suscrito
+# start_subscriber_ws: conecta usando WebSocketClientFactory y connectWS
 ###############################################################################
-def start_subscriber(url, realm, topics, on_message_callback):
-    global global_sub_sessions
-    if realm in global_sub_sessions:
-        try:
-            global_sub_sessions[realm].leave("Re-subscribing with new topics")
-            print("Previous session for realm '{}' closed.".format(realm))
-        except Exception as e:
-            print("Error previous session:", e)
-        del global_sub_sessions[realm]
+def start_subscriber_ws(url, realm, topics, on_message_callback):
+    """
+    Crea una session factory que genera una instancia de MultiTopicSubscriber
+    y conecta al router vía WebSocket usando WebSocketClientFactory y connectWS.
+    Se fuerza la negociación para usar el subprotocolo "wamp.2.json" (sin batched).
+    """
+    # Función que crea la sesión
+    def session_factory():
+        from autobahn.twisted.wamp import ComponentConfig
+        config = ComponentConfig(realm=realm, extra={})
+        session = MultiTopicSubscriber(config)
+        session.topics = topics
+        session.on_message_callback = on_message_callback
+        return session
 
-    def run():
-        # En Autobahn 0.10.2 se usa Twisted, no asyncio
-        runner = ApplicationRunner(url=url, realm=realm)
-        runner.run(MultiTopicSubscriber.factory(topics, on_message_callback))
-
-    threading.Thread(target=run, daemon=True).start()
+    # Creamos la factoría de WebSocket
+    factory = WebSocketClientFactory(url)
+    # Asignamos la función que construye el protocolo (nuestra sesión)
+    factory.buildProtocol = lambda addr: session_factory()
+    # Forzamos la negociación para usar "wamp.2.json"
+    factory.protocols = [u"wamp.2.json"]
+    print("Conectando al router en {} para realm '{}'...".format(url, realm))
+    connectWS(factory)
 
 ###############################################################################
 # JsonTreeDialog: muestra el JSON en formato de árbol expandido
@@ -135,7 +137,7 @@ class JsonTreeDialog(QDialog):
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super(SubscriberMessageViewer, self).__init__(parent)
-        self.messages = []  # Almacenamos los datos parseados (dict)
+        self.messages = []
         self.initUI()
 
     def initUI(self):
@@ -178,7 +180,7 @@ class SubscriberMessageViewer(QWidget):
 # SubscriberTab: interfaz principal del suscriptor
 ###############################################################################
 class SubscriberTab(QWidget):
-    messageReceived = pyqtSignal(str, str, str, object)  # (realm, topic, timestamp, data_dict)
+    messageReceived = pyqtSignal(str, str, str, object)
 
     def __init__(self, parent=None):
         super(SubscriberTab, self).__init__(parent)
@@ -199,7 +201,6 @@ class SubscriberTab(QWidget):
         mainLayout = QHBoxLayout(self)
         leftLayout = QVBoxLayout()
 
-        # Checkboxes globales
         topCtrlLayoutRealms = QHBoxLayout()
         topCtrlLayoutRealms.addWidget(self.checkAllRealms)
         leftLayout.addLayout(topCtrlLayoutRealms)
@@ -286,7 +287,6 @@ class SubscriberTab(QWidget):
         leftLayout.addLayout(ctrlLayout)
         mainLayout.addLayout(leftLayout, stretch=1)
 
-        # Panel derecho: visor de mensajes
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         self.setLayout(mainLayout)
@@ -315,12 +315,11 @@ class SubscriberTab(QWidget):
             else:
                 self.selected_topics_by_realm[self.current_realm] = set()
 
-    # Ruta al config
-    def get_config_path(filename):
+    def get_config_path(self, filename):
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
         else:
-            base_path = os.path.dirname(os.path.abspath(__file__))
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(base_path, "config", filename)
 
     def loadGlobalRealmTopicConfig(self):
@@ -340,7 +339,7 @@ class SubscriberTab(QWidget):
                     self.realms_topics = new_dict
                 else:
                     self.realms_topics = data.get("realms", {})
-                print("✅ Global realms/topics configuration loaded (subscriber).")
+                print("Global realms/topics configuration loaded (subscriber).")
                 self.populateRealmTable()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f" The file realm_topic_config.json could not be loaded:\n{e}")
@@ -453,7 +452,8 @@ class SubscriberTab(QWidget):
                     self.selected_topics_by_realm[realm] = selected
                 selected_topics = list(selected)
                 if selected_topics:
-                    start_subscriber(router_url, realm, selected_topics, self.handleMessage)
+                    # Aquí usamos la nueva función start_subscriber_ws:
+                    start_subscriber_ws(router_url, realm, selected_topics, self.handleMessage)
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     sub_info = {
                         "action": "subscribe",
@@ -514,3 +514,29 @@ class SubscriberTab(QWidget):
     def loadProjectFromConfig(self, sub_config):
         # Implementar si se requiere cargar configuración
         pass
+
+###############################################################################
+# Nueva función: start_subscriber_ws usando autobahn.twisted.websocket
+###############################################################################
+def start_subscriber_ws(url, realm, topics, on_message_callback):
+    """
+    Conecta al router mediante WebSocketClientFactory y connectWS,
+    forzando el subprotocolo "wamp.2.json" (sin batched) para mayor compatibilidad.
+    """
+    from autobahn.twisted.websocket import WebSocketClientFactory, connectWS
+    from autobahn.twisted.wamp import ComponentConfig
+
+    def session_factory():
+        config = ComponentConfig(realm=realm, extra={})
+        session = MultiTopicSubscriber(config)
+        session.topics = topics
+        session.on_message_callback = on_message_callback
+        return session
+
+    factory = WebSocketClientFactory(url)
+    # Configuramos la función buildProtocol para que devuelva nuestra sesión
+    factory.buildProtocol = lambda addr: session_factory()
+    # Forzamos subprotocolos sin "batched"
+    factory.protocols = [u"wamp.2.json"]
+    print("Conectando al router en {} para realm '{}'...".format(url, realm))
+    connectWS(factory)

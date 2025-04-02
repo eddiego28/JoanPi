@@ -34,7 +34,7 @@ def create_splash_screen():
     logo_path = get_resource_path(os.path.join("icons", "logo_wampy.png"))
     logo = QPixmap(logo_path)
     if not logo.isNull():
-        logo = logo.scaled(400, 270, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        logo = logo.scaled(450, 290, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         x = (width - logo.width()) // 2
         y = 80
         painter.drawPixmap(x, y, logo)

@@ -83,6 +83,7 @@ def start_subscriber_ws(url, realm, topics, on_message_callback):
 
     # Creamos la factoría de WebSocket
     factory = WebSocketClientFactory(url)
+    factory.protocols = [u"wamp.2.json", u"wamp.2.msgpack"]    
     # Asignamos la función que construye el protocolo (nuestra sesión)
     factory.buildProtocol = lambda addr: session_factory()
     # Forzamos la negociación para usar "wamp.2.json"

@@ -6,13 +6,14 @@ from PyQt5.QtWidgets import (
     QTabWidget, QTextEdit
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
+from PyQt5.QtGui import QColor
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 from PyQt5.QtWidgets import QTreeWidgetItem
 
 ###############################################################################
 # Diccionario global para almacenar las sesiones activas (una por realm)
-################################################################################
+###############################################################################
 global_sub_sessions = {}  # key: realm, value: session object
 
 ###############################################################################
@@ -29,11 +30,17 @@ class MultiTopicSubscriber(ApplicationSession):
         global global_sub_sessions
         global_sub_sessions[realm_name] = self
         print(f"Suscriptor connected to realm: {realm_name}")
+        # Para cada topic se intenta la suscripción y, en caso de error, se envía un mensaje de error.
         for t in self.topics:
-            await self.subscribe(
-                lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
-                t
-            )
+            try:
+                await self.subscribe(
+                    lambda *args, topic=t, **kwargs: self.on_event(realm_name, topic, *args, **kwargs),
+                    t
+                )
+            except Exception as e:
+                error_data = {"error": f"No ha podido subscribirse al topic {t}: {str(e)}"}
+                if self.on_message_callback:
+                    self.on_message_callback(realm_name, t, error_data)
 
     def on_event(self, realm, topic, *args, **kwargs):
         message_data = {"args": args, "kwargs": kwargs}
@@ -59,7 +66,7 @@ def start_subscriber(url, realm, topics, on_message_callback):
             global_sub_sessions[realm].leave("Re-subscribing with new topics")
             print(f"Previous session for realm '{realm}' closed.")
         except Exception as e:
-            print("Error previous session:", e)
+            print("Error closing previous session:", e)
         del global_sub_sessions[realm]
 
     def run():
@@ -95,8 +102,8 @@ class JsonDetailTabsDialog(QDialog):
         tree_layout = QVBoxLayout(tree_tab)
         tree = QTreeWidget()
         tree.setColumnCount(1)
-        tree.setHeaderLabels(["JSON"])
-        tree.header().setSectionResizeMode(QHeaderView.Stretch)
+        # Se oculta la cabecera para quitar el título
+        tree.header().hide()
         self.buildTree(data, tree.invisibleRootItem())
         tree.expandAll()
         tree_layout.addWidget(tree)
@@ -129,12 +136,13 @@ class JsonDetailTabsDialog(QDialog):
             parent.addChild(item)
 
 ###############################################################################
-# SubscriberMessageViewer: visor de mensajes recibidos (QTable) y detalles (QDialog)
+# SubscriberMessageViewer: visor de mensajes recibidos (QTable) y detalle (ventanas independientes)
 ###############################################################################
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.messages = []  # Almacenamos los datos parseados (dict)
+        self.openDialogs = []  # Lista de ventanas de detalle abiertas
         self.initUI()
 
     def initUI(self):
@@ -149,7 +157,8 @@ class SubscriberMessageViewer(QWidget):
         layout.addWidget(self.table)
         self.setLayout(layout)
 
-    def add_message(self, realm, topic, timestamp, raw_details):
+    def add_message(self, realm, topic, timestamp, raw_details, error=False):
+        # Se procesa raw_details: si es string, se intenta parsear
         if isinstance(raw_details, str):
             try:
                 data = json.loads(raw_details)
@@ -161,17 +170,30 @@ class SubscriberMessageViewer(QWidget):
             data = {"mensaje": str(raw_details)}
         row = self.table.rowCount()
         self.table.insertRow(row)
-        self.table.setItem(row, 0, QTableWidgetItem(timestamp))
-        self.table.setItem(row, 1, QTableWidgetItem(realm))
-        self.table.setItem(row, 2, QTableWidgetItem(topic))
+        time_item = QTableWidgetItem(timestamp)
+        realm_item = QTableWidgetItem(realm)
+        topic_item = QTableWidgetItem(topic)
+        if error:
+            time_item.setForeground(QColor("red"))
+            realm_item.setForeground(QColor("red"))
+            topic_item.setForeground(QColor("red"))
+            
+        self.table.setItem(row, 0, time_item)
+        self.table.setItem(row, 1, realm_item)
+        self.table.setItem(row, 2, topic_item)
         self.messages.append(data)
 
     def showDetails(self, item):
         row = item.row()
         if row < len(self.messages):
             data = self.messages[row]
-            dlg = JsonDetailTabsDialog(data, self)
-            dlg.exec_()
+            dlg = JsonDetailTabsDialog(data)
+            # Se establece modalidad de ventana para que bloquee solo la propia ventana
+            dlg.setWindowModality(Qt.WindowModal)
+            dlg.show()
+            self.openDialogs.append(dlg)
+            # Cuando la ventana se cierra, se elimina de la lista
+            dlg.finished.connect(lambda result, dlg=dlg: self.openDialogs.remove(dlg))
 
 ###############################################################################
 # SubscriberTab: interfaz principal del suscriptor
@@ -181,7 +203,7 @@ class SubscriberTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}          # Se carga desde el archivo de configuración
+        self.realms_topics = {}  # Se carga desde el archivo de configuración
         self.selected_topics_by_realm = {}
         self.current_realm = None
 
@@ -264,7 +286,6 @@ class SubscriberTab(QWidget):
                 font-weight: bold;
             }
         """)
-        # Conecta al método que pregunta si se desea detener la suscripción anterior
         self.btnSubscribe.clicked.connect(self.confirmAndStartSubscription)
         ctrlLayout.addWidget(self.btnSubscribe)
 
@@ -299,23 +320,6 @@ class SubscriberTab(QWidget):
         mainLayout.addWidget(self.viewer, stretch=2)
         self.setLayout(mainLayout)
 
-    # -------------------------------------------------------------------------
-    # Método para extraer el contenido real del mensaje
-    # -------------------------------------------------------------------------
-    def extractContent(self, data):
-        if isinstance(data, dict) and "args" in data and "kwargs" in data:
-            if data["args"]:
-                if len(data["args"]) == 1:
-                    return data["args"][0]
-                else:
-                    return data["args"]
-            elif data["kwargs"]:
-                return data["kwargs"]
-        return data
-
-    # -------------------------------------------------------------------------
-    # Método para preguntar si se desea detener la suscripción anterior
-    # -------------------------------------------------------------------------
     def confirmAndStartSubscription(self):
         global global_sub_sessions
         if global_sub_sessions:
@@ -328,9 +332,6 @@ class SubscriberTab(QWidget):
                 return
         self.startSubscription()
 
-    # -------------------------------------------------------------------------
-    # Toggle All Realms
-    # -------------------------------------------------------------------------
     def toggleAllRealms(self, state):
         for row in range(self.realmTable.rowCount()):
             item = self.realmTable.item(row, 0)
@@ -342,9 +343,6 @@ class SubscriberTab(QWidget):
             else:
                 self.selected_topics_by_realm[realm] = set()
 
-    # -------------------------------------------------------------------------
-    # Toggle All Topics
-    # -------------------------------------------------------------------------
     def toggleAllTopics(self, state):
         if not self.current_realm:
             return
@@ -358,28 +356,19 @@ class SubscriberTab(QWidget):
             else:
                 self.selected_topics_by_realm[self.current_realm] = set()
 
-    # -------------------------------------------------------------------------
-    # Cargar la configuración global de realms/topics
-    # -------------------------------------------------------------------------
     def get_config_path(self, filename):
-        """Devuelve la ruta absoluta del archivo de configuración."""
         if getattr(sys, 'frozen', False):
-            # Si está empaquetado como .exe
             base_path = os.path.dirname(sys.executable)
         else:
-            # Si está ejecutándose como script .py
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(base_path, "config", filename)
 
     def loadGlobalRealmTopicConfig(self):
         config_path = self.get_config_path("realm_topic_config.json")
-        
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                
-                # Aceptar tanto lista como diccionario
                 if isinstance(data.get("realms"), list):
                     new_dict = {}
                     for item in data["realms"]:
@@ -391,18 +380,13 @@ class SubscriberTab(QWidget):
                     self.realms_topics = new_dict
                 else:
                     self.realms_topics = data.get("realms", {})
-
                 print("Global realms/topics configuration loaded (subscriber).")
                 self.populateRealmTable()
-
             except Exception as e:
                 QMessageBox.critical(self, "Error", f" The file realm_topic_config.json could not be loaded:\n{e}")
         else:
             QMessageBox.warning(self, "Warning", " File realm_topic_config.json not found.")
 
-    # -------------------------------------------------------------------------
-    # Rellenar la tabla de realms
-    # -------------------------------------------------------------------------
     def populateRealmTable(self):
         self.realmTable.blockSignals(True)
         self.realmTable.setRowCount(0)
@@ -420,9 +404,6 @@ class SubscriberTab(QWidget):
             self.realmTable.selectRow(0)
             self.onRealmClicked(0, 0)
 
-    # -------------------------------------------------------------------------
-    # Al hacer clic en un realm de la tabla
-    # -------------------------------------------------------------------------
     def onRealmClicked(self, row, col):
         realm_item = self.realmTable.item(row, 0)
         if realm_item:
@@ -445,9 +426,6 @@ class SubscriberTab(QWidget):
     def onRealmItemChanged(self, item):
         pass
 
-    # -------------------------------------------------------------------------
-    # Al marcar/desmarcar un topic en la tabla
-    # -------------------------------------------------------------------------
     def onTopicChanged(self, item):
         if not self.current_realm:
             return
@@ -459,9 +437,6 @@ class SubscriberTab(QWidget):
                 selected.add(t_item.text().strip())
         self.selected_topics_by_realm[realm] = selected
 
-    # -------------------------------------------------------------------------
-    # Agregar un nuevo realm
-    # -------------------------------------------------------------------------
     def addRealmRow(self):
         new_realm = self.newRealmEdit.text().strip()
         if new_realm:
@@ -474,9 +449,6 @@ class SubscriberTab(QWidget):
             self.realmTable.setItem(row, 1, QTableWidgetItem("ws://127.0.0.1:60001"))
             self.newRealmEdit.clear()
 
-    # -------------------------------------------------------------------------
-    # Borrar realms no marcados
-    # -------------------------------------------------------------------------
     def deleteRealmRow(self):
         rows_to_delete = []
         for row in range(self.realmTable.rowCount()):
@@ -486,9 +458,6 @@ class SubscriberTab(QWidget):
         for row in reversed(rows_to_delete):
             self.realmTable.removeRow(row)
 
-    # -------------------------------------------------------------------------
-    # Agregar un nuevo topic
-    # -------------------------------------------------------------------------
     def addTopicRow(self):
         new_topic = self.newTopicEdit.text().strip()
         if new_topic:
@@ -500,9 +469,6 @@ class SubscriberTab(QWidget):
             self.topicTable.setItem(row, 0, t_item)
             self.newTopicEdit.clear()
 
-    # -------------------------------------------------------------------------
-    # Borrar topics no marcados
-    # -------------------------------------------------------------------------
     def deleteTopicRow(self):
         rows_to_delete = []
         for row in range(self.topicTable.rowCount()):
@@ -512,9 +478,6 @@ class SubscriberTab(QWidget):
         for row in reversed(rows_to_delete):
             self.topicTable.removeRow(row)
 
-    # -------------------------------------------------------------------------
-    # Iniciar la suscripción a cada realm marcado
-    # -------------------------------------------------------------------------
     def startSubscription(self):
         for row in range(self.realmTable.rowCount()):
             realm_item = self.realmTable.item(row, 0)
@@ -540,16 +503,11 @@ class SubscriberTab(QWidget):
                     }
                     details = json.dumps(sub_info, indent=2, ensure_ascii=False)
                     self.viewer.add_message(realm, ", ".join(selected_topics), timestamp, details)
-                    # Se registra el evento de suscripción en los logs
-                    log_to_file(timestamp, realm, ", ".join(selected_topics), details)
                     print(f"Subscribed to Realm '{realm}' with topics {selected_topics}")
                     sys.stdout.flush()
                 else:
                     QMessageBox.warning(self, "Warning", f"There are no topics selected for the realm '{realm}'.")
 
-    # -------------------------------------------------------------------------
-    # Método para preguntar si se desea detener la suscripción anterior
-    # -------------------------------------------------------------------------
     def confirmAndStartSubscription(self):
         global global_sub_sessions
         if global_sub_sessions:
@@ -562,9 +520,6 @@ class SubscriberTab(QWidget):
                 return
         self.startSubscription()
 
-    # -------------------------------------------------------------------------
-    # Detener todas las suscripciones activas
-    # -------------------------------------------------------------------------
     def stopSubscription(self):
         global global_sub_sessions
         if not global_sub_sessions:
@@ -576,37 +531,33 @@ class SubscriberTab(QWidget):
                 print(f"Subscription stopped for realm '{realm}'.")
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.viewer.add_message(realm, "Stopped", timestamp, "Subscription stopped successfully.")
-                # Se registra el evento de detención en los logs
-                log_to_file(timestamp, realm, "Stopped", "Subscription stopped successfully.")
             except Exception as e:
                 print("Error stopping subscription:", e)
             del global_sub_sessions[realm]
 
-    # -------------------------------------------------------------------------
-    # Callback para manejar el mensaje recibido
-    # -------------------------------------------------------------------------
     def handleMessage(self, realm, topic, content):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Se extrae el contenido real, descartando "args" y "kwargs"
-        extracted_content = self.extractContent(content)
-        self.messageReceived.emit(realm, topic, timestamp, extracted_content)
-        log_to_file(timestamp, realm, topic, json.dumps(extracted_content, indent=2, ensure_ascii=False))
+        error_flag = False
+        if isinstance(content, dict) and "error" in content:
+            error_flag = True
+        self.messageReceived.emit(realm, topic, timestamp, content)
+        log_to_file(timestamp, realm, topic, json.dumps(content, indent=2, ensure_ascii=False))
         print(f"Message received in '{realm}', topic '{topic}' at {timestamp}")
         sys.stdout.flush()
 
     @pyqtSlot(str, str, str, object)
     def onMessageReceived(self, realm, topic, timestamp, data_dict):
         details_str = json.dumps(data_dict, indent=2, ensure_ascii=False)
-        self.viewer.add_message(realm, topic, timestamp, details_str)
+        error_flag = False
+        if isinstance(data_dict, dict) and "error" in data_dict:
+            error_flag = True
+        self.viewer.add_message(realm, topic, timestamp, details_str, error=error_flag)
 
-    # -------------------------------------------------------------------------
-    # Reset Log
-    # -------------------------------------------------------------------------
     def resetLog(self):
         self.viewer.table.setRowCount(0)
         self.viewer.messages = []
 
     def loadProjectFromConfig(self, sub_config):
-        # Implementar si se requiere cargar configuración
         pass
+
 

@@ -1,17 +1,15 @@
 {
-    "pid": 3744, 
+    "pid": 15876, 
     "argv": [
         "crossbar", 
-        "start", 
-        "--loglevel", 
-        "debug"
+        "start"
     ], 
     "options": {
         "debug_lifecycle": false, 
         "debug_programflow": false, 
         "command": "start", 
         "color": false, 
-        "loglevel": "debug", 
+        "loglevel": "info", 
         "logformat": "standard", 
         "logdir": null, 
         "logtofile": false, 

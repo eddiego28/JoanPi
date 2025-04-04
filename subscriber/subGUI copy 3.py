@@ -2,8 +2,7 @@ import os, json, datetime, asyncio, threading, sys
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
-    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QCheckBox,
-    QTabWidget, QTextEdit
+    QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QCheckBox
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
@@ -70,41 +69,23 @@ def start_subscriber(url, realm, topics, on_message_callback):
     threading.Thread(target=run, daemon=True).start()
 
 ###############################################################################
-# JsonDetailTabsDialog: muestra el JSON en dos pestañas (raw y tree view)
+# JsonTreeDialog: muestra el JSON en formato de árbol expandido
 ###############################################################################
-class JsonDetailTabsDialog(QDialog):
+class JsonTreeDialog(QDialog):
     def __init__(self, data, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("JSON Details")
+        self.setWindowTitle("JSON detail - Tree View")
         self.resize(600, 400)
         layout = QVBoxLayout(self)
-        tab_widget = QTabWidget(self)
-        
-        # Pestaña para JSON "raw"
-        raw_json_tab = QWidget()
-        raw_layout = QVBoxLayout(raw_json_tab)
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        raw_json_str = json.dumps(data, indent=2, ensure_ascii=False)
-        text_edit.setText(raw_json_str)
-        raw_layout.addWidget(text_edit)
-        tab_widget.addTab(raw_json_tab, "Raw JSON")
-        
-        # Pestaña para vista en árbol
-        tree_tab = QWidget()
-        tree_layout = QVBoxLayout(tree_tab)
-        tree = QTreeWidget()
-        tree.setColumnCount(1)
-        tree.setHeaderLabels(["JSON"])
-        tree.header().setSectionResizeMode(QHeaderView.Stretch)
-        self.buildTree(data, tree.invisibleRootItem())
-        tree.expandAll()
-        tree_layout.addWidget(tree)
-        tab_widget.addTab(tree_tab, "Tree View")
-        
-        layout.addWidget(tab_widget)
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(1)
+        self.tree.setHeaderLabels(["JSON"])
+        self.tree.header().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.tree)
         self.setLayout(layout)
-    
+        self.buildTree(data, self.tree.invisibleRootItem())
+        self.tree.expandAll()
+
     def buildTree(self, data, parent):
         if isinstance(data, dict):
             for key, value in data.items():
@@ -170,7 +151,7 @@ class SubscriberMessageViewer(QWidget):
         row = item.row()
         if row < len(self.messages):
             data = self.messages[row]
-            dlg = JsonDetailTabsDialog(data, self)
+            dlg = JsonTreeDialog(data, self)
             dlg.exec_()
 
 ###############################################################################
@@ -264,7 +245,7 @@ class SubscriberTab(QWidget):
                 font-weight: bold;
             }
         """)
-        # Conecta al método que pregunta si se desea detener la suscripción anterior
+        # Aquí se conecta al nuevo método que pregunta si se desea detener la suscripción anterior
         self.btnSubscribe.clicked.connect(self.confirmAndStartSubscription)
         ctrlLayout.addWidget(self.btnSubscribe)
 
@@ -298,20 +279,6 @@ class SubscriberTab(QWidget):
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         self.setLayout(mainLayout)
-
-    # -------------------------------------------------------------------------
-    # Método para extraer el contenido real del mensaje
-    # -------------------------------------------------------------------------
-    def extractContent(self, data):
-        if isinstance(data, dict) and "args" in data and "kwargs" in data:
-            if data["args"]:
-                if len(data["args"]) == 1:
-                    return data["args"][0]
-                else:
-                    return data["args"]
-            elif data["kwargs"]:
-                return data["kwargs"]
-        return data
 
     # -------------------------------------------------------------------------
     # Método para preguntar si se desea detener la suscripción anterior
@@ -540,8 +507,6 @@ class SubscriberTab(QWidget):
                     }
                     details = json.dumps(sub_info, indent=2, ensure_ascii=False)
                     self.viewer.add_message(realm, ", ".join(selected_topics), timestamp, details)
-                    # Se registra el evento de suscripción en los logs
-                    log_to_file(timestamp, realm, ", ".join(selected_topics), details)
                     print(f"Subscribed to Realm '{realm}' with topics {selected_topics}")
                     sys.stdout.flush()
                 else:
@@ -576,8 +541,6 @@ class SubscriberTab(QWidget):
                 print(f"Subscription stopped for realm '{realm}'.")
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.viewer.add_message(realm, "Stopped", timestamp, "Subscription stopped successfully.")
-                # Se registra el evento de detención en los logs
-                log_to_file(timestamp, realm, "Stopped", "Subscription stopped successfully.")
             except Exception as e:
                 print("Error stopping subscription:", e)
             del global_sub_sessions[realm]
@@ -587,10 +550,8 @@ class SubscriberTab(QWidget):
     # -------------------------------------------------------------------------
     def handleMessage(self, realm, topic, content):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Se extrae el contenido real, descartando "args" y "kwargs"
-        extracted_content = self.extractContent(content)
-        self.messageReceived.emit(realm, topic, timestamp, extracted_content)
-        log_to_file(timestamp, realm, topic, json.dumps(extracted_content, indent=2, ensure_ascii=False))
+        self.messageReceived.emit(realm, topic, timestamp, content)
+        log_to_file(timestamp, realm, topic, json.dumps(content, indent=2, ensure_ascii=False))
         print(f"Message received in '{realm}', topic '{topic}' at {timestamp}")
         sys.stdout.flush()
 
@@ -609,4 +570,3 @@ class SubscriberTab(QWidget):
     def loadProjectFromConfig(self, sub_config):
         # Implementar si se requiere cargar configuración
         pass
-

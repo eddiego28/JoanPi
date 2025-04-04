@@ -264,7 +264,7 @@ class SubscriberTab(QWidget):
                 font-weight: bold;
             }
         """)
-        # Conecta al método que pregunta si se desea detener la suscripción anterior
+        # Aquí se conecta al nuevo método que pregunta si se desea detener la suscripción anterior
         self.btnSubscribe.clicked.connect(self.confirmAndStartSubscription)
         ctrlLayout.addWidget(self.btnSubscribe)
 
@@ -298,20 +298,6 @@ class SubscriberTab(QWidget):
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         self.setLayout(mainLayout)
-
-    # -------------------------------------------------------------------------
-    # Método para extraer el contenido real del mensaje
-    # -------------------------------------------------------------------------
-    def extractContent(self, data):
-        if isinstance(data, dict) and "args" in data and "kwargs" in data:
-            if data["args"]:
-                if len(data["args"]) == 1:
-                    return data["args"][0]
-                else:
-                    return data["args"]
-            elif data["kwargs"]:
-                return data["kwargs"]
-        return data
 
     # -------------------------------------------------------------------------
     # Método para preguntar si se desea detener la suscripción anterior
@@ -587,10 +573,8 @@ class SubscriberTab(QWidget):
     # -------------------------------------------------------------------------
     def handleMessage(self, realm, topic, content):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Se extrae el contenido real, descartando "args" y "kwargs"
-        extracted_content = self.extractContent(content)
-        self.messageReceived.emit(realm, topic, timestamp, extracted_content)
-        log_to_file(timestamp, realm, topic, json.dumps(extracted_content, indent=2, ensure_ascii=False))
+        self.messageReceived.emit(realm, topic, timestamp, content)
+        log_to_file(timestamp, realm, topic, json.dumps(content, indent=2, ensure_ascii=False))
         print(f"Message received in '{realm}', topic '{topic}' at {timestamp}")
         sys.stdout.flush()
 
@@ -610,3 +594,12 @@ class SubscriberTab(QWidget):
         # Implementar si se requiere cargar configuración
         pass
 
+###############################################################################
+# Bloque principal para ejecutar la aplicación
+###############################################################################
+if __name__ == '__main__':
+    from PyQt5.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+    window = SubscriberTab()
+    window.show()
+    sys.exit(app.exec_())

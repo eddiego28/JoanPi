@@ -1,10 +1,8 @@
-# common/utils.py
-import os, json, datetime, logging
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QFileDialog, QMessageBox, QTreeWidget, QTreeWidgetItem
-
 import os
+import json
 import datetime
 import logging
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QFileDialog, QMessageBox, QTreeWidget, QTreeWidgetItem
 
 # Obtener la ruta del directorio actual (donde se encuentra este archivo utils.py)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +36,6 @@ def log_to_file(time_str, realm, topic, message_json):
     """
     entry = f"{time_str} | Realm: {realm} | Topic: {topic}\n{message_json}\n\n"
     logger.info(entry)
-
 
 class JsonDetailDialog(QDialog):
     """

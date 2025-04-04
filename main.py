@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
+    
     # Icono de la ventana
     icon_path = get_resource_path(os.path.join("icons", "logo_wampy.png"))
     app.setWindowIcon(QIcon(icon_path))

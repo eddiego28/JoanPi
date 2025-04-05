@@ -107,10 +107,6 @@ if __name__ == "__main__":
     icon_path = get_resource_path(os.path.join("icons", "logo_wampy.png"))
     app.setWindowIcon(QIcon(icon_path))
 
-    # Estilo (QSS)
-    stylesheet_path = get_resource_path("estilo.qss")
-    load_stylesheet(app, stylesheet_path)
-
     # Splash screen
     splash = create_splash_screen()
     if splash:

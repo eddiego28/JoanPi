@@ -11,6 +11,15 @@ from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 from PyQt5.QtWidgets import QTreeWidgetItem
 
+# Función auxiliar que elimina las claves "args" y "kwargs" recursivamente
+def filter_message(data):
+    if isinstance(data, dict):
+        return {k: filter_message(v) for k, v in data.items() if k not in ("args", "kwargs")}
+    elif isinstance(data, list):
+        return [filter_message(item) for item in data]
+    else:
+        return data
+
 ###############################################################################
 # Diccionario global para almacenar las sesiones activas (una por realm)
 ###############################################################################
@@ -24,13 +33,14 @@ class MultiTopicSubscriber(ApplicationSession):
         super().__init__(config)
         self.topics = []  # Se asignan antes de iniciar la sesión
         self.on_message_callback = None
+        self.logged = False  # Flag para registrar un solo mensaje
 
     async def onJoin(self, details):
         realm_name = self.config.realm
         global global_sub_sessions
         global_sub_sessions[realm_name] = self
         print(f"Suscriptor connected to realm: {realm_name}")
-        # Para cada topic se intenta la suscripción y, en caso de error, se envía un mensaje de error.
+        errors = []
         for t in self.topics:
             try:
                 await self.subscribe(
@@ -38,9 +48,24 @@ class MultiTopicSubscriber(ApplicationSession):
                     t
                 )
             except Exception as e:
-                error_data = {"error": f"No ha podido subscribirse al topic {t}: {str(e)}"}
+                errors.append(f"Topic {t}: {str(e)}")
+        if not self.logged:
+            if errors:
+                self.logged = True
                 if self.on_message_callback:
-                    self.on_message_callback(realm_name, t, error_data)
+                    self.on_message_callback(realm_name, "Subscription", {"error": "No se pudo subscribir: " + ", ".join(errors)})
+            else:
+                self.logged = True
+                if self.on_message_callback:
+                    self.on_message_callback(realm_name, "Subscription", {"success": "Subscribed successfully"})
+
+    async def onDisconnect(self):
+        realm_name = self.config.realm
+        if not self.logged:
+            if self.on_message_callback:
+                self.on_message_callback(realm_name, "Connection", {"error": "Conexión rechazada o perdida"})
+            self.logged = True
+        print(f"Disconnected from realm: {realm_name}")
 
     def on_event(self, realm, topic, *args, **kwargs):
         message_data = {"args": args, "kwargs": kwargs}
@@ -73,7 +98,10 @@ def start_subscriber(url, realm, topics, on_message_callback):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         runner = ApplicationRunner(url=url, realm=realm)
-        runner.run(MultiTopicSubscriber.factory(topics, on_message_callback))
+        try:
+            runner.run(MultiTopicSubscriber.factory(topics, on_message_callback))
+        except Exception as e:
+            on_message_callback(realm, "Connection", {"error": f"Connection failed: {str(e)}"})
     threading.Thread(target=run, daemon=True).start()
 
 ###############################################################################
@@ -102,8 +130,7 @@ class JsonDetailTabsDialog(QDialog):
         tree_layout = QVBoxLayout(tree_tab)
         tree = QTreeWidget()
         tree.setColumnCount(1)
-        # Se oculta la cabecera para quitar el título
-        tree.header().hide()
+        tree.header().hide()  # Oculta la cabecera para quitar el título "JSON"
         self.buildTree(data, tree.invisibleRootItem())
         tree.expandAll()
         tree_layout.addWidget(tree)
@@ -136,13 +163,13 @@ class JsonDetailTabsDialog(QDialog):
             parent.addChild(item)
 
 ###############################################################################
-# SubscriberMessageViewer: visor de mensajes recibidos (QTable) y detalle (ventanas independientes)
+# SubscriberMessageViewer: visor de mensajes recibidos (QTable) y detalles (ventanas independientes)
 ###############################################################################
 class SubscriberMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.messages = []  # Almacenamos los datos parseados (dict)
-        self.openDialogs = []  # Lista de ventanas de detalle abiertas
+        self.messages = []       # Datos parseados de los mensajes (dict)
+        self.openDialogs = []    # Ventanas de detalle abiertas
         self.initUI()
 
     def initUI(self):
@@ -158,7 +185,7 @@ class SubscriberMessageViewer(QWidget):
         self.setLayout(layout)
 
     def add_message(self, realm, topic, timestamp, raw_details, error=False):
-        # Se procesa raw_details: si es string, se intenta parsear
+        # Procesamos raw_details: si es string, intentamos parsearlo como JSON
         if isinstance(raw_details, str):
             try:
                 data = json.loads(raw_details)
@@ -177,7 +204,6 @@ class SubscriberMessageViewer(QWidget):
             time_item.setForeground(QColor("red"))
             realm_item.setForeground(QColor("red"))
             topic_item.setForeground(QColor("red"))
-            
         self.table.setItem(row, 0, time_item)
         self.table.setItem(row, 1, realm_item)
         self.table.setItem(row, 2, topic_item)
@@ -188,11 +214,9 @@ class SubscriberMessageViewer(QWidget):
         if row < len(self.messages):
             data = self.messages[row]
             dlg = JsonDetailTabsDialog(data)
-            # Se establece modalidad de ventana para que bloquee solo la propia ventana
             dlg.setWindowModality(Qt.WindowModal)
             dlg.show()
             self.openDialogs.append(dlg)
-            # Cuando la ventana se cierra, se elimina de la lista
             dlg.finished.connect(lambda result, dlg=dlg: self.openDialogs.remove(dlg))
 
 ###############################################################################
@@ -203,7 +227,7 @@ class SubscriberTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realms_topics = {}  # Se carga desde el archivo de configuración
+        self.realms_topics = {}          # Se carga desde el archivo de configuración
         self.selected_topics_by_realm = {}
         self.current_realm = None
 
@@ -494,20 +518,11 @@ class SubscriberTab(QWidget):
                 selected_topics = list(selected)
                 if selected_topics:
                     start_subscriber(router_url, realm, selected_topics, self.handleMessage)
-                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    sub_info = {
-                        "action": "subscribe",
-                        "realm": realm,
-                        "router_url": router_url,
-                        "topics": selected_topics
-                    }
-                    details = json.dumps(sub_info, indent=2, ensure_ascii=False)
-                    self.viewer.add_message(realm, ", ".join(selected_topics), timestamp, details)
-                    print(f"Subscribed to Realm '{realm}' with topics {selected_topics}")
+                    print(f"Attempting to subscribe to Realm '{realm}' with topics {selected_topics}")
                     sys.stdout.flush()
                 else:
                     QMessageBox.warning(self, "Warning", f"There are no topics selected for the realm '{realm}'.")
-
+    
     def confirmAndStartSubscription(self):
         global global_sub_sessions
         if global_sub_sessions:
@@ -540,16 +555,20 @@ class SubscriberTab(QWidget):
         error_flag = False
         if isinstance(content, dict) and "error" in content:
             error_flag = True
-        self.messageReceived.emit(realm, topic, timestamp, content)
-        log_to_file(timestamp, realm, topic, json.dumps(content, indent=2, ensure_ascii=False))
+        # Filtramos el contenido para eliminar las claves "args" y "kwargs"
+        filtered = filter_message(content)
+        details_str = json.dumps(filtered, indent=2, ensure_ascii=False)
+        self.messageReceived.emit(realm, topic, timestamp, filtered)
+        log_to_file(timestamp, realm, topic, details_str)
         print(f"Message received in '{realm}', topic '{topic}' at {timestamp}")
         sys.stdout.flush()
 
     @pyqtSlot(str, str, str, object)
     def onMessageReceived(self, realm, topic, timestamp, data_dict):
-        details_str = json.dumps(data_dict, indent=2, ensure_ascii=False)
+        filtered = filter_message(data_dict)
+        details_str = json.dumps(filtered, indent=2, ensure_ascii=False)
         error_flag = False
-        if isinstance(data_dict, dict) and "error" in data_dict:
+        if isinstance(filtered, dict) and "error" in filtered:
             error_flag = True
         self.viewer.add_message(realm, topic, timestamp, details_str, error=error_flag)
 

@@ -143,7 +143,7 @@ class PublisherMessageViewer(QWidget):
         row = item.row()
         if row < len(self.pubMessages):
             data = self.pubMessages[row]
-            dlg = JsonDetailTabsDialog(data)
+            dlg = JsonDetailDialog(data)
             # Se establece modalidad de ventana para que bloquee solo su propia ventana
             dlg.setWindowModality(Qt.WindowModal)
             dlg.show()

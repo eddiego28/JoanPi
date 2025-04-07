@@ -104,11 +104,17 @@ def send_message_now(session, loop, topic, message, delay=0):
     asyncio.run_coroutine_threadsafe(_send(), loop)
 
 # --------------------------
-# CLASS FOR JSON DETAIL WITH TABS (RAW and TREE)
+# JsonDetailTabsDialog: muestra el JSON en dos pestañas (Raw y Tree)
 # --------------------------
 class JsonDetailTabsDialog(QDialog):
     def __init__(self, data, parent=None):
         super().__init__(parent)
+        # Si data es una cadena, se intenta cargar como JSON
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                pass  # Si falla, se mantiene la cadena
         self.setWindowTitle("JSON Details")
         self.resize(600, 400)
         layout = QVBoxLayout(self)
@@ -128,7 +134,7 @@ class JsonDetailTabsDialog(QDialog):
         tree_layout = QVBoxLayout(tree_tab)
         tree = QTreeWidget()
         tree.setColumnCount(1)
-        tree.header().hide()  # Hide header
+        tree.header().hide()  # Ocultar cabecera
         self.buildTree(data, tree.invisibleRootItem())
         tree.expandAll()
         tree_layout.addWidget(tree)
@@ -140,22 +146,23 @@ class JsonDetailTabsDialog(QDialog):
     def buildTree(self, data, parent):
         if isinstance(data, dict):
             for key, value in data.items():
+                item = QTreeWidgetItem([f"{key}:"])
+                parent.addChild(item)
                 if isinstance(value, (dict, list)):
-                    item = QTreeWidgetItem([f"{key}:"])
-                    parent.addChild(item)
                     self.buildTree(value, item)
                 else:
-                    item = QTreeWidgetItem([f"{key}: {value}"])
-                    parent.addChild(item)
+                    # Agregar el valor como hijo si es simple
+                    value_item = QTreeWidgetItem([str(value)])
+                    item.addChild(value_item)
         elif isinstance(data, list):
             for index, value in enumerate(data):
+                item = QTreeWidgetItem([f"[{index}]:"])
+                parent.addChild(item)
                 if isinstance(value, (dict, list)):
-                    item = QTreeWidgetItem([f"[{index}]:"])
-                    parent.addChild(item)
                     self.buildTree(value, item)
                 else:
-                    item = QTreeWidgetItem([f"[{index}]: {value}"])
-                    parent.addChild(item)
+                    value_item = QTreeWidgetItem([str(value)])
+                    item.addChild(value_item)
         else:
             item = QTreeWidgetItem([str(data)])
             parent.addChild(item)
@@ -170,8 +177,8 @@ class PublisherMessageViewer(QWidget):
         self.initUI()
     def initUI(self):
         layout = QVBoxLayout(self)
+        # Se mantiene 3 columnas en la QTable: Time, Realm, Topic
         self.table = QTableWidget()
-        # QTable con 3 columnas: Time, Realm, Topic
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["Time", "Realm", "Topic"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -710,4 +717,5 @@ class PublisherTab(QWidget):
             QMessageBox.information(self, "Project", "Project saved successfully.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not save project:\n{e}")
+
 

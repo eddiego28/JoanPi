@@ -114,8 +114,9 @@ class PublisherMessageViewer(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
         self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Time", "Realm", "Topic"])
+        # Se establece 4 columnas: Time, Realm, Topic y Details (formateado)
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Time", "Realm", "Topic", "Details"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -123,28 +124,30 @@ class PublisherMessageViewer(QWidget):
         layout.addWidget(self.table)
         self.setLayout(layout)
     def add_message(self, realm, topic, timestamp, details, error=False):
-        if isinstance(details, str):
-            details = details.replace("\n", " ")
+        # Aquí se espera que 'details' sea un string con formato JSON extendido.
         row = self.table.rowCount()
         self.table.insertRow(row)
         time_item = QTableWidgetItem(timestamp)
         realm_item = QTableWidgetItem(realm)
         topic_item = QTableWidgetItem(topic)
+        details_item = QTableWidgetItem(details)
+        details_item.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
         if error:
-            # Se marca en rojo indicando error
             time_item.setForeground(QColor("red"))
             realm_item.setForeground(QColor("red"))
             topic_item.setForeground(QColor("red"))
+            details_item.setForeground(QColor("red"))
         self.table.setItem(row, 0, time_item)
         self.table.setItem(row, 1, realm_item)
         self.table.setItem(row, 2, topic_item)
+        self.table.setItem(row, 3, details_item)
+        self.table.resizeRowToContents(row)
         self.pubMessages.append(details)
     def showDetails(self, item):
         row = item.row()
         if row < len(self.pubMessages):
             data = self.pubMessages[row]
             dlg = JsonDetailDialog(data)
-            # Se establece modalidad de ventana para que bloquee solo su propia ventana
             dlg.setWindowModality(Qt.WindowModal)
             dlg.show()
             self.openDialogs = getattr(self, "openDialogs", [])
@@ -655,3 +658,4 @@ class PublisherTab(QWidget):
             QMessageBox.information(self, "Project", "Project saved successfully.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not save project:\n{e}")
+        

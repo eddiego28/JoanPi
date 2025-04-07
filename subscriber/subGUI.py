@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QLineEdit, QFileDialog,
     QDialog, QTreeWidget, QComboBox, QSplitter, QGroupBox, QCheckBox,
-    QTabWidget, QTextEdit
+    QTabWidget, QTextEdit, QApplication
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from PyQt5.QtGui import QColor
@@ -115,39 +115,51 @@ def start_subscriber(url, realm, topics, on_message_callback):
     threading.Thread(target=run, daemon=True).start()
 
 ###############################################################################
-# JsonDetailTabsDialog: muestra el JSON en dos pestañas (raw y tree view)
+# JsonDetailTabsDialog: muestra el JSON en dos pestañas (Raw y Tree) con botón para copiar
 ###############################################################################
 class JsonDetailTabsDialog(QDialog):
     def __init__(self, data, parent=None):
         super().__init__(parent)
+        # Si data es una cadena, se intenta cargar como JSON
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                pass
+        # Guardamos el JSON formateado en self.raw_json_str para copiar
+        self.raw_json_str = json.dumps(data, indent=2, ensure_ascii=False)
         self.setWindowTitle("JSON Details")
         self.resize(600, 400)
-        layout = QVBoxLayout(self)
+        mainLayout = QVBoxLayout(self)
+        # Botón para copiar JSON al portapapeles
+        copyButton = QPushButton("Copy JSON")
+        copyButton.clicked.connect(self.copyJson)
+        mainLayout.addWidget(copyButton)
+        # Tab widget para mostrar el JSON en raw y en forma de árbol
         tab_widget = QTabWidget(self)
         
-        # Pestaña para JSON "raw"
-        raw_json_tab = QWidget()
-        raw_layout = QVBoxLayout(raw_json_tab)
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        raw_json_str = json.dumps(data, indent=2, ensure_ascii=False)
-        text_edit.setText(raw_json_str)
-        raw_layout.addWidget(text_edit)
-        tab_widget.addTab(raw_json_tab, "Raw JSON")
+        # Pestaña Raw JSON
+        raw_tab = QWidget()
+        raw_layout = QVBoxLayout(raw_tab)
+        raw_text = QTextEdit()
+        raw_text.setReadOnly(True)
+        raw_text.setPlainText(self.raw_json_str)
+        raw_layout.addWidget(raw_text)
+        tab_widget.addTab(raw_tab, "Raw JSON")
         
-        # Pestaña para vista en árbol
+        # Pestaña Tree View
         tree_tab = QWidget()
         tree_layout = QVBoxLayout(tree_tab)
         tree = QTreeWidget()
         tree.setColumnCount(1)
-        tree.header().hide()  # Oculta la cabecera para quitar el título "JSON"
+        tree.header().hide()  # Ocultar cabecera
         self.buildTree(data, tree.invisibleRootItem())
         tree.expandAll()
         tree_layout.addWidget(tree)
         tab_widget.addTab(tree_tab, "Tree View")
         
-        layout.addWidget(tab_widget)
-        self.setLayout(layout)
+        mainLayout.addWidget(tab_widget)
+        self.setLayout(mainLayout)
     
     def buildTree(self, data, parent):
         if isinstance(data, dict):
@@ -171,6 +183,11 @@ class JsonDetailTabsDialog(QDialog):
         else:
             item = QTreeWidgetItem([str(data)])
             parent.addChild(item)
+    
+    def copyJson(self):
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.raw_json_str)
+        QMessageBox.information(self, "Copied", "JSON copied to clipboard.")
 
 ###############################################################################
 # SubscriberMessageViewer: visor de mensajes recibidos (QTable) y detalles (ventanas independientes)
@@ -195,7 +212,6 @@ class SubscriberMessageViewer(QWidget):
         self.setLayout(layout)
 
     def add_message(self, realm, topic, timestamp, raw_details, error=False):
-        # Procesamos raw_details: si es string, intentamos parsearlo como JSON
         if isinstance(raw_details, str):
             try:
                 data = json.loads(raw_details)
@@ -241,7 +257,6 @@ class SubscriberTab(QWidget):
         self.selected_topics_by_realm = {}
         self.current_realm = None
 
-        # Checkboxes "All Realms" y "All Topics"
         self.checkAllRealms = QCheckBox("All Realms")
         self.checkAllRealms.stateChanged.connect(self.toggleAllRealms)
         self.checkAllTopics = QCheckBox("All Topics")
@@ -256,8 +271,6 @@ class SubscriberTab(QWidget):
 
         # Panel izquierdo: Realms y Topics
         leftLayout = QVBoxLayout()
-
-        # Checkbox global para Realms
         topCtrlLayoutRealms = QHBoxLayout()
         topCtrlLayoutRealms.addWidget(self.checkAllRealms)
         leftLayout.addLayout(topCtrlLayoutRealms)
@@ -271,7 +284,6 @@ class SubscriberTab(QWidget):
         self.realmTable.itemChanged.connect(self.onRealmItemChanged)
         leftLayout.addWidget(self.realmTable)
 
-        # Botones para Realms
         realmBtnsLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("New Realm")
@@ -284,7 +296,6 @@ class SubscriberTab(QWidget):
         realmBtnsLayout.addWidget(self.btnDelRealm)
         leftLayout.addLayout(realmBtnsLayout)
 
-        # Checkbox global para Topics
         topCtrlLayoutTopics = QHBoxLayout()
         topCtrlLayoutTopics.addWidget(self.checkAllTopics)
         leftLayout.addLayout(topCtrlLayoutTopics)
@@ -297,7 +308,6 @@ class SubscriberTab(QWidget):
         self.topicTable.itemChanged.connect(self.onTopicChanged)
         leftLayout.addWidget(self.topicTable)
 
-        # Botones para Topics
         topicBtnsLayout = QHBoxLayout()
         self.newTopicEdit = QLineEdit()
         self.newTopicEdit.setPlaceholderText("New Topic")
@@ -310,7 +320,6 @@ class SubscriberTab(QWidget):
         topicBtnsLayout.addWidget(self.btnDelTopic)
         leftLayout.addLayout(topicBtnsLayout)
 
-        # Botones de control: Suscribirse, Detener Suscripción y Reset Log
         ctrlLayout = QHBoxLayout()
         self.btnSubscribe = QPushButton("Subscribe")
         self.btnSubscribe.setStyleSheet("""
@@ -346,10 +355,8 @@ class SubscriberTab(QWidget):
         ctrlLayout.addWidget(self.btnReset)
 
         leftLayout.addLayout(ctrlLayout)
-
         mainLayout.addLayout(leftLayout, stretch=1)
 
-        # Panel derecho: Visor de mensajes
         self.viewer = SubscriberMessageViewer(self)
         mainLayout.addWidget(self.viewer, stretch=2)
         self.setLayout(mainLayout)
@@ -532,7 +539,7 @@ class SubscriberTab(QWidget):
                     sys.stdout.flush()
                 else:
                     QMessageBox.warning(self, "Warning", f"There are no topics selected for the realm '{realm}'.")
-
+    
     def confirmAndStartSubscription(self):
         global global_sub_sessions
         if global_sub_sessions:
@@ -565,7 +572,6 @@ class SubscriberTab(QWidget):
         error_flag = False
         if isinstance(content, dict) and "error" in content:
             error_flag = True
-        # Se extrae el contenido filtrado (sin args y kwargs) para mostrar en QTable y logs
         filtered = extract_message(content)
         details_str = json.dumps(filtered, indent=2, ensure_ascii=False)
         self.messageReceived.emit(realm, topic, timestamp, filtered)
@@ -589,12 +595,4 @@ class SubscriberTab(QWidget):
     def loadProjectFromConfig(self, sub_config):
         pass
 
-###############################################################################
-# Bloque principal para ejecutar la aplicación
-###############################################################################
-if __name__ == '__main__':
-    from PyQt5.QtWidgets import QApplication
-    app = QApplication(sys.argv)
-    window = SubscriberTab()
-    window.show()
-    sys.exit(app.exec_())
+

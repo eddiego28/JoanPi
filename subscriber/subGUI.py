@@ -11,12 +11,22 @@ from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from common.utils import log_to_file, JsonDetailDialog
 from PyQt5.QtWidgets import QTreeWidgetItem
 
-# Función auxiliar que elimina las claves "args" y "kwargs" recursivamente
-def filter_message(data):
+# Función auxiliar para extraer el contenido si el mensaje está envuelto solo en args/kwargs
+def extract_message(data):
     if isinstance(data, dict):
-        return {k: filter_message(v) for k, v in data.items() if k not in ("args", "kwargs")}
-    elif isinstance(data, list):
-        return [filter_message(item) for item in data]
+        keys = set(data.keys())
+        if keys.issubset({"args", "kwargs"}):
+            if "args" in data and data["args"]:
+                if len(data["args"]) == 1:
+                    return data["args"][0]
+                else:
+                    return data["args"]
+            elif "kwargs" in data and data["kwargs"]:
+                return data["kwargs"]
+            else:
+                return data
+        else:
+            return data
     else:
         return data
 
@@ -33,7 +43,7 @@ class MultiTopicSubscriber(ApplicationSession):
         super().__init__(config)
         self.topics = []  # Se asignan antes de iniciar la sesión
         self.on_message_callback = None
-        self.logged = False  # Flag para registrar un solo mensaje
+        self.logged = False  # Flag para registrar un solo mensaje por intento
 
     async def onJoin(self, details):
         realm_name = self.config.realm
@@ -522,7 +532,7 @@ class SubscriberTab(QWidget):
                     sys.stdout.flush()
                 else:
                     QMessageBox.warning(self, "Warning", f"There are no topics selected for the realm '{realm}'.")
-    
+
     def confirmAndStartSubscription(self):
         global global_sub_sessions
         if global_sub_sessions:
@@ -555,8 +565,8 @@ class SubscriberTab(QWidget):
         error_flag = False
         if isinstance(content, dict) and "error" in content:
             error_flag = True
-        # Filtramos el contenido para eliminar las claves "args" y "kwargs"
-        filtered = filter_message(content)
+        # Se extrae el contenido filtrado (sin args y kwargs) para mostrar en QTable y logs
+        filtered = extract_message(content)
         details_str = json.dumps(filtered, indent=2, ensure_ascii=False)
         self.messageReceived.emit(realm, topic, timestamp, filtered)
         log_to_file(timestamp, realm, topic, details_str)
@@ -565,7 +575,7 @@ class SubscriberTab(QWidget):
 
     @pyqtSlot(str, str, str, object)
     def onMessageReceived(self, realm, topic, timestamp, data_dict):
-        filtered = filter_message(data_dict)
+        filtered = extract_message(data_dict)
         details_str = json.dumps(filtered, indent=2, ensure_ascii=False)
         error_flag = False
         if isinstance(filtered, dict) and "error" in filtered:
@@ -579,4 +589,12 @@ class SubscriberTab(QWidget):
     def loadProjectFromConfig(self, sub_config):
         pass
 
-
+###############################################################################
+# Bloque principal para ejecutar la aplicación
+###############################################################################
+if __name__ == '__main__':
+    from PyQt5.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+    window = SubscriberTab()
+    window.show()
+    sys.exit(app.exec_())

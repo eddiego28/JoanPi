@@ -64,7 +64,7 @@ class PublisherEditorWidget(QWidget):
         self.tabWidget.addTab(self.jsonTab, "JSON")
         # Pestaña con árbol para edición del JSON
         self.treeTab = QWidget()
-        treeLayout = QVBoxLayout(self.treeTab)
+        treeLayout = QVBoxLayout()
         # Botón de carga de JSON en la pestaña del árbol
         self.loadJsonButton2 = QPushButton("Load JSON from file")
         self.loadJsonButton2.clicked.connect(self.loadJsonFromFile)
@@ -91,6 +91,7 @@ class PublisherEditorWidget(QWidget):
         self.jsonTree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.jsonTree.customContextMenuRequested.connect(self.showContextMenu)
         treeLayout.addWidget(self.jsonTree)
+        self.treeTab.setLayout(treeLayout)
         self.tabWidget.addTab(self.treeTab, "JSON Tree")
         self.tabWidget.currentChanged.connect(self.onTabChanged)
         layout.addWidget(self.tabWidget)

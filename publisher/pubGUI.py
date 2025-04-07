@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
     QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox, QCheckBox,
-    QApplication, QMainWindow, QToolBar, QAction, QTabWidget
+    QApplication, QMainWindow, QToolBar, QAction, QTabWidget, QTextEdit
 )
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QIcon, QColor
@@ -104,6 +104,63 @@ def send_message_now(session, loop, topic, message, delay=0):
     asyncio.run_coroutine_threadsafe(_send(), loop)
 
 # --------------------------
+# CLASS FOR JSON DETAIL WITH TABS (RAW and TREE)
+# --------------------------
+class JsonDetailTabsDialog(QDialog):
+    def __init__(self, data, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("JSON Details")
+        self.resize(600, 400)
+        layout = QVBoxLayout(self)
+        tab_widget = QTabWidget(self)
+        
+        # Raw JSON tab
+        raw_tab = QWidget()
+        raw_layout = QVBoxLayout(raw_tab)
+        raw_text = QTextEdit()
+        raw_text.setReadOnly(True)
+        raw_text.setPlainText(json.dumps(data, indent=2, ensure_ascii=False))
+        raw_layout.addWidget(raw_text)
+        tab_widget.addTab(raw_tab, "Raw JSON")
+        
+        # Tree view tab
+        tree_tab = QWidget()
+        tree_layout = QVBoxLayout(tree_tab)
+        tree = QTreeWidget()
+        tree.setColumnCount(1)
+        tree.header().hide()  # Hide header
+        self.buildTree(data, tree.invisibleRootItem())
+        tree.expandAll()
+        tree_layout.addWidget(tree)
+        tab_widget.addTab(tree_tab, "Tree View")
+        
+        layout.addWidget(tab_widget)
+        self.setLayout(layout)
+    
+    def buildTree(self, data, parent):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, (dict, list)):
+                    item = QTreeWidgetItem([f"{key}:"])
+                    parent.addChild(item)
+                    self.buildTree(value, item)
+                else:
+                    item = QTreeWidgetItem([f"{key}: {value}"])
+                    parent.addChild(item)
+        elif isinstance(data, list):
+            for index, value in enumerate(data):
+                if isinstance(value, (dict, list)):
+                    item = QTreeWidgetItem([f"[{index}]:"])
+                    parent.addChild(item)
+                    self.buildTree(value, item)
+                else:
+                    item = QTreeWidgetItem([f"[{index}]: {value}"])
+                    parent.addChild(item)
+        else:
+            item = QTreeWidgetItem([str(data)])
+            parent.addChild(item)
+
+# --------------------------
 # PUBLISHER MESSAGE VIEWER (LOG)
 # --------------------------
 class PublisherMessageViewer(QWidget):
@@ -114,9 +171,9 @@ class PublisherMessageViewer(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
         self.table = QTableWidget()
-        # Agregamos una columna extra para mostrar el detalle extendido del JSON
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Time", "Realm", "Topic", "Details"])
+        # QTable con 3 columnas: Time, Realm, Topic
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Time", "Realm", "Topic"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -131,25 +188,18 @@ class PublisherMessageViewer(QWidget):
         time_item = QTableWidgetItem(timestamp)
         realm_item = QTableWidgetItem(realm)
         topic_item = QTableWidgetItem(topic)
-        details_item = QTableWidgetItem(details)
-        details_item.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
         if error:
             time_item.setForeground(QColor("red"))
             realm_item.setForeground(QColor("red"))
             topic_item.setForeground(QColor("red"))
-            details_item.setForeground(QColor("red"))
         self.table.setItem(row, 0, time_item)
         self.table.setItem(row, 1, realm_item)
         self.table.setItem(row, 2, topic_item)
-        self.table.setItem(row, 3, details_item)
-        self.table.resizeRowToContents(row)
         self.pubMessages.append(details)
     def showDetails(self, item):
         row = item.row()
         if row < len(self.pubMessages):
             data = self.pubMessages[row]
-            # Abrir ventana de detalle con pestañas (como antes)
-            from .pubEditor import JsonDetailTabsDialog
             dlg = JsonDetailTabsDialog(data)
             dlg.setWindowModality(Qt.WindowModal)
             dlg.show()
@@ -660,4 +710,4 @@ class PublisherTab(QWidget):
             QMessageBox.information(self, "Project", "Project saved successfully.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not save project:\n{e}")
-        
+

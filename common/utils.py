@@ -2,13 +2,19 @@ import os
 import json
 import datetime
 import logging
+import sys
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QFileDialog, QMessageBox, QTreeWidget, QTreeWidgetItem
 
-# Obtener la ruta del directorio actual (donde se encuentra este archivo utils.py)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Determinar la ruta base: 
+# Si se ejecuta como ejecutable (sys.frozen=True) usamos la carpeta del ejecutable,
+# de lo contrario, usamos la raíz del proyecto (asumida en el directorio superior al de este archivo).
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Definir el directorio de logs: se creará en la raíz del proyecto en una carpeta llamada "logs"
-LOG_DIR = os.path.join(BASE_DIR, "..", "logs")
+# Definir el directorio de logs en la raíz del proyecto, en una carpeta "logs"
+LOG_DIR = os.path.join(BASE_DIR, "logs")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 

@@ -57,10 +57,10 @@ class JSONPublisher(ApplicationSession):
     def __init__(self, config, topic, widget):
         super().__init__(config)
         self.topic = topic
-        self.widget = widget  # Referencia al widget que inicia esta sesión
+        self.widget = widget  # Reference to the widget that starts this session
 
     async def onJoin(self, details):
-        self.loop = asyncio.get_event_loop()  # Guardamos el loop en la sesión
+        self.loop = asyncio.get_event_loop()  # Save loop in session
         self.widget.session = self
         self.widget.loop = self.loop
         global global_pub_sessions
@@ -114,7 +114,7 @@ class PublisherMessageViewer(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
         self.table = QTableWidget()
-        # Se establece 4 columnas: Time, Realm, Topic y Details (formateado)
+        # Agregamos una columna extra para mostrar el detalle extendido del JSON
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Time", "Realm", "Topic", "Details"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -124,7 +124,8 @@ class PublisherMessageViewer(QWidget):
         layout.addWidget(self.table)
         self.setLayout(layout)
     def add_message(self, realm, topic, timestamp, details, error=False):
-        # Aquí se espera que 'details' sea un string con formato JSON extendido.
+        if isinstance(details, str):
+            details = details.replace("\n", " ")
         row = self.table.rowCount()
         self.table.insertRow(row)
         time_item = QTableWidgetItem(timestamp)
@@ -147,7 +148,9 @@ class PublisherMessageViewer(QWidget):
         row = item.row()
         if row < len(self.pubMessages):
             data = self.pubMessages[row]
-            dlg = JsonDetailDialog(data)
+            # Abrir ventana de detalle con pestañas (como antes)
+            from .pubEditor import JsonDetailTabsDialog
+            dlg = JsonDetailTabsDialog(data)
             dlg.setWindowModality(Qt.WindowModal)
             dlg.show()
             self.openDialogs = getattr(self, "openDialogs", [])
@@ -379,7 +382,6 @@ class MessageConfigWidget(QWidget):
     def deleteSelf(self):
         reply = QMessageBox.question(self, "Confirm Delete", f"Delete Message #{self.msg_id}?", QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
-            # Recorrer la cadena de padres hasta encontrar el contenedor que implemente removeMessageWidget
             parent = self.parentWidget()
             while parent is not None and not hasattr(parent, "removeMessageWidget"):
                 parent = parent.parentWidget()

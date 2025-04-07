@@ -16,6 +16,7 @@ def get_resource_path(relative_path):
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
+# Función para cargar la hoja de estilos (opcional)
 def load_stylesheet(app, stylesheet_path):
     try:
         with open(stylesheet_path, "r") as f:
@@ -23,6 +24,7 @@ def load_stylesheet(app, stylesheet_path):
     except Exception as e:
         print("❌ Error loading stylesheet:", e)
 
+# Función para crear la pantalla de splash
 def create_splash_screen():
     width, height = 700, 400
     pixmap = QPixmap(width, height)
@@ -103,17 +105,20 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     
-    # Icono de la ventana
+    # Establecer el icono de la aplicación (aparece en la barra de tareas y en la ventana)
     icon_path = get_resource_path(os.path.join("icons", "logo_wampy.png"))
     app.setWindowIcon(QIcon(icon_path))
-
-    # Splash screen
+    
+    # Opcional: cargar stylesheet si se desea
+    # load_stylesheet(app, get_resource_path("styles.qss"))
+    
+    # Crear y mostrar splash screen
     splash = create_splash_screen()
     if splash:
         splash.show()
 
-    # Mostrar ventana principal después del splash screen
     main_window = MainWindow()
+    # Cerrar el splash y mostrar la ventana principal después de 5 segundos
     QTimer.singleShot(5000, splash.close)
     QTimer.singleShot(5000, main_window.show)
 

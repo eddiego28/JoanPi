@@ -1,10 +1,18 @@
-import sys, os, json, datetime, logging, asyncio, threading
+import sys
+import os
+import json
+import datetime
+import logging
+import asyncio
+import threading
+
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QToolBar, QAction, QTabWidget, QWidget,
-    QVBoxLayout, QSplashScreen, QMessageBox, QFileDialog
+    QApplication, QMainWindow, QToolBar, QToolButton, QAction, QMenu,
+    QTabWidget, QWidget, QVBoxLayout, QSplashScreen, QMessageBox, QFileDialog
 )
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QIcon
+
 from publisher.pubGUI import PublisherTab
 from subscriber.subGUI import SubscriberTab
 
@@ -21,15 +29,7 @@ def ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
 
-# Función para cargar la hoja de estilos (opcional)
-def load_stylesheet(app, stylesheet_path):
-    try:
-        with open(stylesheet_path, "r") as f:
-            app.setStyleSheet(f.read())
-    except Exception as e:
-        print("❌ Error loading stylesheet:", e)
-
-# Función para crear la pantalla de splash
+# Función para crear la pantalla de splash (igual que tu versión original)
 def create_splash_screen():
     width, height = 700, 400
     pixmap = QPixmap(width, height)
@@ -37,7 +37,6 @@ def create_splash_screen():
 
     painter = QPainter(pixmap)
 
-    # Logo principal
     logo_path = get_resource_path(os.path.join("icons", "logo_wampy.png"))
     logo = QPixmap(logo_path)
     if not logo.isNull():
@@ -45,10 +44,7 @@ def create_splash_screen():
         x = (width - logo.width()) // 2
         y = 80
         painter.drawPixmap(x, y, logo)
-    else:
-        print("❌ Error: Could not load image:", logo_path)
 
-    # Icono secundario
     icon_path = get_resource_path(os.path.join("icons", "open.png"))
     icon = QPixmap(icon_path)
     if not icon.isNull():
@@ -56,8 +52,6 @@ def create_splash_screen():
         x = (width - icon.width()) // 2
         y = 20
         painter.drawPixmap(x, y, icon)
-    else:
-        print("❌ Error: Could not load image:", icon_path)
 
     painter.end()
 
@@ -90,35 +84,66 @@ class MainWindow(QMainWindow):
         self.toolbar.setIconSize(QSize(24, 24))
         self.addToolBar(Qt.TopToolBarArea, self.toolbar)
 
-        # Acciones separadas
-        loadPubAct = QAction("Load Publisher", self)
-        loadPubAct.triggered.connect(self.publisherTab.loadProject)
-        loadSubAct = QAction("Load Subscriber", self)
-        loadSubAct.triggered.connect(self.subscriberTab.loadProject)
-        loadProjAct = QAction("Load Project", self)
-        loadProjAct.triggered.connect(self.loadProject)
+        # --- Load Menu ---
+        loadBtn = QToolButton(self)
+        loadBtn.setText("Load")
+        loadMenu = QMenu(self)
+        projLoad = QAction("Project", self)
+        projLoad.triggered.connect(self.loadProject)
+        pubLoad = QAction("Publisher", self)
+        pubLoad.triggered.connect(self.publisherTab.loadProject)
+        subLoad = QAction("Subscriber", self)
+        subLoad.triggered.connect(self.subscriberTab.loadProject)
+        loadMenu.addAction(projLoad)
+        loadMenu.addAction(pubLoad)
+        loadMenu.addAction(subLoad)
+        loadBtn.setMenu(loadMenu)
+        loadBtn.setPopupMode(QToolButton.InstantPopup)
+        self.toolbar.addWidget(loadBtn)
 
-        savePubAct = QAction("Save Publisher", self)
-        savePubAct.triggered.connect(self.publisherTab.saveProject)
-        saveSubAct = QAction("Save Subscriber", self)
-        saveSubAct.triggered.connect(self.subscriberTab.saveProject)
-        saveProjAct = QAction("Save Project", self)
-        saveProjAct.triggered.connect(self.saveProject)
+        # --- Save Menu ---
+        saveBtn = QToolButton(self)
+        saveBtn.setText("Save")
+        saveMenu = QMenu(self)
+        projSave = QAction("Project", self)
+        projSave.triggered.connect(self.saveProject)
+        pubSave = QAction("Publisher", self)
+        pubSave.triggered.connect(self.publisherTab.saveProject)
+        subSave = QAction("Subscriber", self)
+        subSave.triggered.connect(self.subscriberTab.saveProject)
+        saveMenu.addAction(projSave)
+        saveMenu.addAction(pubSave)
+        saveMenu.addAction(subSave)
+        saveBtn.setMenu(saveMenu)
+        saveBtn.setPopupMode(QToolButton.InstantPopup)
+        self.toolbar.addWidget(saveBtn)
 
+        # --- About Menu ---
+        aboutBtn = QToolButton(self)
+        aboutBtn.setText("About")
+        aboutMenu = QMenu(self)
         aboutAct = QAction("About", self)
         aboutAct.triggered.connect(lambda: QMessageBox.information(
             self, "About", "wamPy v1.0\nDeveloped by Enrique de Diego Henar"))
+        aboutMenu.addAction(aboutAct)
+        aboutBtn.setMenu(aboutMenu)
+        aboutBtn.setPopupMode(QToolButton.InstantPopup)
+        self.toolbar.addWidget(aboutBtn)
 
-        self.toolbar.addAction(loadPubAct)
-        self.toolbar.addAction(loadSubAct)
-        self.toolbar.addAction(loadProjAct)
-        self.toolbar.addAction(savePubAct)
-        self.toolbar.addAction(saveSubAct)
-        self.toolbar.addAction(saveProjAct)
-        self.toolbar.addAction(aboutAct)
+        # --- Help Button ---
+        helpAct = QAction("Help", self)
+        helpAct.triggered.connect(self.showHelp)
+        self.toolbar.addAction(helpAct)
+
+    def showHelp(self):
+        QMessageBox.information(self, "Help",
+            "Use the Load/Save menus to manage Publisher, Subscriber or full Project configurations.\n"
+            "Load → Project opens 'config/projects',\n"
+            "Load → Publisher opens 'config/projects/publisher',\n"
+            "Load → Subscriber opens 'config/projects/subscriber'."
+        )
 
     def saveProject(self):
-        """Guarda configuración combinada de Publisher y Subscriber en un JSON."""
         base_dir = get_resource_path(os.path.join('config', 'projects'))
         ensure_dir(base_dir)
         filepath, _ = QFileDialog.getSaveFileName(
@@ -137,7 +162,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Could not save project:\n{e}")
 
     def loadProject(self):
-        """Carga configuración combinada de Publisher y Subscriber desde un JSON."""
         base_dir = get_resource_path(os.path.join('config', 'projects'))
         ensure_dir(base_dir)
         filepath, _ = QFileDialog.getOpenFileName(
@@ -156,19 +180,12 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
     icon_path = get_resource_path(os.path.join("icons", "logo_wampy.png"))
     app.setWindowIcon(QIcon(icon_path))
-
-    # Opcional: cargar stylesheet si se desea
-    # load_stylesheet(app, get_resource_path("styles.qss"))
-
     splash = create_splash_screen()
     if splash:
         splash.show()
-
     main_window = MainWindow()
     QTimer.singleShot(5000, splash.close)
     QTimer.singleShot(5000, main_window.show)
-
     sys.exit(app.exec_())

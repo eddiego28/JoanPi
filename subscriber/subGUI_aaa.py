@@ -126,11 +126,9 @@ class JsonDetailTabsDialog(QDialog):
         copyBtn.clicked.connect(self.copyJson)
         layout.addWidget(copyBtn)
         tabs = QTabWidget()
-        # Raw
         rawTab = QWidget(); rl = QVBoxLayout(rawTab)
         rawText = QTextEdit(); rawText.setReadOnly(True); rawText.setPlainText(self.raw_json_str)
         rl.addWidget(rawText); tabs.addTab(rawTab, "Raw JSON")
-        # Tree
         treeTab = QWidget(); tl = QVBoxLayout(treeTab)
         tree = QTreeWidget(); tree.setHeaderHidden(True)
         self.buildTree(data, tree.invisibleRootItem()); tree.expandAll()
@@ -383,28 +381,24 @@ class SubscriberTab(QWidget):
     def deleteTopicRow(self):
         if not self.current_realm:
             return
-        rows = []
-        for r in range(self.topicTable.rowCount()):
-            it = self.topicTable.item(r, 0)
-            if it and it.checkState() == Qt.Checked:
-                rows.append(r)
-        for r in reversed(rows):
+        selected_rows = [idx.row() for idx in self.topicTable.selectionModel().selectedRows()]
+        for r in sorted(selected_rows, reverse=True):
             topic = self.topicTable.item(r, 0).text().strip()
             self.topicTable.removeRow(r)
             if topic in self.realms_topics[self.current_realm]['topics']:
                 self.realms_topics[self.current_realm]['topics'].remove(topic)
-            self.selected_topics_by_realm[self.current_realm].discard(topic)
+            self.selected_topics_by_realm.get(self.current_realm, set()).discard(topic)
 
     def onTopicChanged(self, item):
         if not self.current_realm:
             return
-        selected = set()
+        sel = set()
         for r in range(self.topicTable.rowCount()):
             it = self.topicTable.item(r, 0)
             if it and it.checkState() == Qt.Checked:
-                selected.add(it.text().strip())
-        self.selected_topics_by_realm[self.current_realm] = selected
-        self.realms_topics[self.current_realm]['topics'] = list(selected)
+                sel.add(it.text().strip())
+        self.selected_topics_by_realm[self.current_realm] = sel
+        self.realms_topics[self.current_realm]['topics'] = list(sel)
 
     def toggleAllRealms(self, state):
         for r in range(self.realmTable.rowCount()):

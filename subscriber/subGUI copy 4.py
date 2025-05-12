@@ -1,33 +1,44 @@
 def deleteRealmRow(self):
-    # Borra las filas seleccionadas en la tabla de realms
-    selected_rows = [idx.row() for idx in self.realmTable.selectionModel().selectedRows()]
-    for row in sorted(selected_rows, reverse=True):
-        realm = self.realmTable.item(row, 0).text().strip()
+    # Borra solo las filas seleccionadas (por selección de fila)
+    rows = sorted({idx.row() for idx in self.realmTable.selectionModel().selectedRows()}, reverse=True)
+    for row in rows:
+        item = self.realmTable.item(row, 0)
+        if not item:
+            continue
+        realm = item.text().strip()
         self.realmTable.removeRow(row)
+        # Elimina del estado interno sin lanzar KeyError
         self.realms_topics.pop(realm, None)
         self.selected_topics_by_realm.pop(realm, None)
 
-    # Si el realm actual ha sido borrado, limpia topics y resetea current_realm
-    if self.current_realm not in self.realms_topics:
+    # Si el current_realm ha desaparecido, limpialo y la tabla de topics
+    if not self.current_realm or self.current_realm not in self.realms_topics:
         self.current_realm = None
         self.topicTable.setRowCount(0)
     else:
-        # Si sigue habiendo ese realm, recarga su lista de topics
+        # Si sigue existiendo, recarga sus topics
         for r in range(self.realmTable.rowCount()):
-            if self.realmTable.item(r, 0).text() == self.current_realm:
+            if self.realmTable.item(r, 0).text().strip() == self.current_realm:
                 self.onRealmClicked(r, 0)
                 break
 
 def deleteTopicRow(self):
-    # Asegura que el realm sigue existiendo antes de borrar topics
+    # Asegúrate de que el realm sigue existiendo
     if not self.current_realm or self.current_realm not in self.realms_topics:
         return
 
-    selected_rows = [idx.row() for idx in self.topicTable.selectionModel().selectedRows()]
-    for row in sorted(selected_rows, reverse=True):
-        topic = self.topicTable.item(row, 0).text().strip()
+    rows = sorted({idx.row() for idx in self.topicTable.selectionModel().selectedRows()}, reverse=True)
+    for row in rows:
+        item = self.topicTable.item(row, 0)
+        if not item:
+            continue
+        topic = item.text().strip()
         self.topicTable.removeRow(row)
-        # Elimina del dict interno
-        if topic in self.realms_topics[self.current_realm]['topics']:
-            self.realms_topics[self.current_realm]['topics'].remove(topic)
-        self.selected_topics_by_realm[self.current_realm].discard(topic)
+        # Elimina topic de la lista interna sin error
+        topics = self.realms_topics.get(self.current_realm, {}).get('topics', [])
+        if topic in topics:
+            topics.remove(topic)
+        # Asegura que el set existe antes de descartar
+        sel = self.selected_topics_by_realm.get(self.current_realm)
+        if sel is not None:
+            sel.discard(topic)

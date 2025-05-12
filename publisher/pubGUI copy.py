@@ -3,38 +3,26 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QSplitter,
     QGroupBox, QFormLayout, QMessageBox, QLineEdit, QFileDialog, QComboBox, QCheckBox,
-    QApplication, QMainWindow, QToolBar, QAction, QTabWidget, QDialog, QTreeWidget, QVBoxLayout as QVBox, QTreeWidgetItem
+    QApplication, QMainWindow, QToolBar, QAction, QTabWidget, QTextEdit,QDialog, QTreeWidget, QTreeWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer, QSize
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QColor
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
-from common.utils import log_to_file  # <= si lo usas para log, mantenlo
+from common.utils import log_to_file
 from .pubEditor import PublisherEditorWidget
 
-###############################################################################
-# Realms and topics configuration
-###############################################################################
+# --------------------------
+# REALMS AND TOPICS CONFIGURATION
+# --------------------------
 REALMS_CONFIG = {}
-
-def get_resource_path(relative_path):
-    """Obtiene la ruta absoluta del recurso, compatible con PyInstaller."""
-    if getattr(sys, 'frozen', False):
-        # Estamos en .exe
-        base_path = os.path.dirname(sys.executable)
-    else:
-        # Estamos en .py
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_path, relative_path)
 
 def load_realm_topic_config():
     global REALMS_CONFIG
     try:
-        # Ruta al archivo config/realm_topic_config_pub.json en el directorio de recursos
-        config_path = get_resource_path(os.path.join("config", "realm_topic_config_pub.json"))
-        
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_path, "..", "config", "realm_topic_config_pub.json")
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
-
         if isinstance(config.get("realms"), list):
             new_dict = {}
             for realm_info in config.get("realms", []):
@@ -46,9 +34,7 @@ def load_realm_topic_config():
             REALMS_CONFIG = new_dict
         else:
             REALMS_CONFIG = config.get("realms", {})
-
-        print("✅ Realms and topics configuration loaded from:", config_path)
-
+        print("Realms and topics configuration loaded from", config_path)
     except Exception as e:
         print("Error loading configuration:", e)
         REALMS_CONFIG = {
@@ -57,17 +43,16 @@ def load_realm_topic_config():
         }
         print("Using default configuration.")
 
-# Cargar al iniciar
 load_realm_topic_config()
 
-###############################################################################
-# Global dictionary for publisher sessions (one per realm)
-###############################################################################
+# --------------------------
+# GLOBAL DICTIONARY FOR PUBLISHER SESSIONS (one per realm)
+# --------------------------
 global_pub_sessions = {}  # key: realm, value: session object
 
-###############################################################################
-# JSONPublisher session
-###############################################################################
+# --------------------------
+# CLASSES FOR PUBLICATION
+# --------------------------
 class JSONPublisher(ApplicationSession):
     def __init__(self, config, topic, widget):
         super().__init__(config)
@@ -75,17 +60,16 @@ class JSONPublisher(ApplicationSession):
         self.widget = widget  # Reference to the widget that starts this session
 
     async def onJoin(self, details):
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_event_loop()  # Save loop in session
         self.widget.session = self
         self.widget.loop = self.loop
         global global_pub_sessions
         global_pub_sessions[self.config.realm] = self
-        print(f"Connected (realm: {self.config.realm}, topic: {self.topic})")
+        print("Connected (realm:", self.config.realm, ", topic:", self.topic,")")
         await asyncio.Future()
 
 def start_publisher(url, realm, topic, widget):
     global global_pub_sessions
-    # If a session for this realm already exists, reuse it
     if realm in global_pub_sessions:
         widget.session = global_pub_sessions[realm]
         widget.loop = widget.session.loop
@@ -105,7 +89,6 @@ def send_message_now(session, loop, topic, message, delay=0):
     if session is None or loop is None:
         print("No active session in this widget. Start the publisher first.")
         return
-
     async def _send():
         if delay > 0:
             await asyncio.sleep(delay)
@@ -118,61 +101,83 @@ def send_message_now(session, loop, topic, message, delay=0):
         log_to_file(timestamp, topic, session.config.realm, message_json)
         logging.info(f"Published: {timestamp} | Topic: {topic} | Realm: {session.config.realm}")
         print("Message sent on", topic, ":", message)
-
     asyncio.run_coroutine_threadsafe(_send(), loop)
 
-###############################################################################
-# JsonTreeDialog: shows JSON in a tree format
-###############################################################################
-class JsonTreeDialog(QDialog):
+# --------------------------
+# JsonDetailTabsDialog: muestra el JSON en dos pestañas (Raw y Tree)
+# --------------------------
+class JsonDetailTabsDialog(QDialog):
     def __init__(self, data, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("JSON detail - Tree View")
+        # Si data es una cadena, se intenta cargar como JSON
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                pass  # Si falla, se mantiene la cadena
+        self.setWindowTitle("JSON Details")
         self.resize(600, 400)
-        layout = QVBox(self)
-        self.tree = QTreeWidget()
-        self.tree.setColumnCount(1)
-        self.tree.setHeaderLabels(["JSON"])
-        self.tree.header().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.tree)
+        layout = QVBoxLayout(self)
+        tab_widget = QTabWidget(self)
+        
+        # Raw JSON tab
+        raw_tab = QWidget()
+        raw_layout = QVBoxLayout(raw_tab)
+        raw_text = QTextEdit()
+        raw_text.setReadOnly(True)
+        raw_text.setPlainText(json.dumps(data, indent=2, ensure_ascii=False))
+        raw_layout.addWidget(raw_text)
+        tab_widget.addTab(raw_tab, "Raw JSON")
+        
+        # Tree view tab
+        tree_tab = QWidget()
+        tree_layout = QVBoxLayout(tree_tab)
+        tree = QTreeWidget()
+        tree.setColumnCount(1)
+        tree.header().hide()  # Ocultar cabecera
+        self.buildTree(data, tree.invisibleRootItem())
+        tree.expandAll()
+        tree_layout.addWidget(tree)
+        tab_widget.addTab(tree_tab, "Tree View")
+        
+        layout.addWidget(tab_widget)
         self.setLayout(layout)
-        self.buildTree(data, self.tree.invisibleRootItem())
-        self.tree.expandAll()
-
+    
     def buildTree(self, data, parent):
         if isinstance(data, dict):
             for key, value in data.items():
+                item = QTreeWidgetItem([f"{key}:"])
+                parent.addChild(item)
                 if isinstance(value, (dict, list)):
-                    item = QTreeWidgetItem([f"{key}:"])
-                    parent.addChild(item)
                     self.buildTree(value, item)
                 else:
-                    item = QTreeWidgetItem([f"{key}: {value}"])
-                    parent.addChild(item)
+                    # Agregar el valor como hijo si es simple
+                    value_item = QTreeWidgetItem([str(value)])
+                    item.addChild(value_item)
         elif isinstance(data, list):
             for index, value in enumerate(data):
+                item = QTreeWidgetItem([f"[{index}]:"])
+                parent.addChild(item)
                 if isinstance(value, (dict, list)):
-                    item = QTreeWidgetItem([f"[{index}]:"])
-                    parent.addChild(item)
                     self.buildTree(value, item)
                 else:
-                    item = QTreeWidgetItem([f"[{index}]: {value}"])
-                    parent.addChild(item)
+                    value_item = QTreeWidgetItem([str(value)])
+                    item.addChild(value_item)
         else:
             item = QTreeWidgetItem([str(data)])
             parent.addChild(item)
 
-###############################################################################
-# PublisherMessageViewer: log viewer for publisher messages
-###############################################################################
+# --------------------------
+# PUBLISHER MESSAGE VIEWER (LOG)
+# --------------------------
 class PublisherMessageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pubMessages = []
         self.initUI()
-
     def initUI(self):
         layout = QVBoxLayout(self)
+        # Se mantiene 3 columnas en la QTable: Time, Realm, Topic
         self.table = QTableWidget()
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["Time", "Realm", "Topic"])
@@ -182,43 +187,36 @@ class PublisherMessageViewer(QWidget):
         self.table.itemDoubleClicked.connect(self.showDetails)
         layout.addWidget(self.table)
         self.setLayout(layout)
-
-    def add_message(self, realm, topic, timestamp, details):
-        """
-        details es el contenido crudo (string con JSON, o dict).
-        Lo guardamos en la lista self.pubMessages para luego mostrarlo en la vista de árbol.
-        """
+    def add_message(self, realm, topic, timestamp, details, error=False):
+        if isinstance(details, str):
+            details = details.replace("\n", " ")
         row = self.table.rowCount()
         self.table.insertRow(row)
-        self.table.setItem(row, 0, QTableWidgetItem(timestamp))
-        self.table.setItem(row, 1, QTableWidgetItem(realm))
-        self.table.setItem(row, 2, QTableWidgetItem(topic))
+        time_item = QTableWidgetItem(timestamp)
+        realm_item = QTableWidgetItem(realm)
+        topic_item = QTableWidgetItem(topic)
+        if error:
+            time_item.setForeground(QColor("red"))
+            realm_item.setForeground(QColor("red"))
+            topic_item.setForeground(QColor("red"))
+        self.table.setItem(row, 0, time_item)
+        self.table.setItem(row, 1, realm_item)
+        self.table.setItem(row, 2, topic_item)
         self.pubMessages.append(details)
-
     def showDetails(self, item):
-        """
-        Al hacer doble clic en una fila, parseamos el contenido a JSON y lo mostramos en un diálogo de árbol.
-        """
         row = item.row()
         if row < len(self.pubMessages):
-            raw_details = self.pubMessages[row]
-            # Intentar parsear a JSON
-            if isinstance(raw_details, str):
-                try:
-                    data = json.loads(raw_details)
-                except Exception:
-                    data = {"message": raw_details}
-            elif isinstance(raw_details, dict):
-                data = raw_details
-            else:
-                data = {"message": str(raw_details)}
+            data = self.pubMessages[row]
+            dlg = JsonDetailTabsDialog(data)
+            dlg.setWindowModality(Qt.WindowModal)
+            dlg.show()
+            self.openDialogs = getattr(self, "openDialogs", [])
+            self.openDialogs.append(dlg)
+            dlg.finished.connect(lambda result, dlg=dlg: self.openDialogs.remove(dlg))
 
-            dlg = JsonTreeDialog(data, self)
-            dlg.exec_()
-
-###############################################################################
-# MessageConfigWidget
-###############################################################################
+# --------------------------
+# MESSAGE CONFIGURATION WIDGET
+# --------------------------
 class MessageConfigWidget(QWidget):
     def __init__(self, msg_id, parent=None):
         super().__init__(parent)
@@ -229,81 +227,52 @@ class MessageConfigWidget(QWidget):
         self.message_enabled = True
         self.is_minimized = False
         self.initUI()
-
-        # Conectar la señal de onDemandRadio para deshabilitar el campo de tiempo
         self.editorWidget.onDemandRadio.toggled.connect(self.updateTimeField)
 
     def initUI(self):
         self.setStyleSheet("QWidget { font-family: 'Segoe UI'; font-size: 10pt; }")
         mainLayout = QVBoxLayout(self)
-
-        # Header: Checkbox, minimize button, label
+        # Header: Checkbox, label, minimize/expand y botón de borrado
         self.headerWidget = QWidget()
         headerLayout = QHBoxLayout(self.headerWidget)
-
         self.enableCheckBox = QCheckBox()
         self.enableCheckBox.setChecked(True)
         self.enableCheckBox.stateChanged.connect(self.onEnableChanged)
-        headerLayout.addWidget(self.enableCheckBox)
-
-        self.minimizeButton = QPushButton("–")
-        self.minimizeButton.setObjectName("minimizeButton")
-        # Establecemos un tamaño basado en el sizeHint() aumentado
-        size = self.enableCheckBox.sizeHint()
-        self.minimizeButton.setFixedSize(size.width() + 1, size.height())
-
-       
-        self.minimizeButton.clicked.connect(self.toggleMinimize)
-        headerLayout.addWidget(self.minimizeButton)
-
         self.headerLabel = QLabel(f"Message #{self.msg_id}")
+        headerLayout.addWidget(self.enableCheckBox)
         headerLayout.addWidget(self.headerLabel)
         headerLayout.addStretch()
+        self.minimizeButton = QPushButton("–")
+        self.minimizeButton.setFixedSize(20, 20)
+        self.minimizeButton.clicked.connect(self.toggleMinimize)
+        headerLayout.addWidget(self.minimizeButton)
+        self.deleteButton = QPushButton("Delete")
+        self.deleteButton.setFixedSize(50, 20)
+        self.deleteButton.clicked.connect(self.deleteSelf)
+        headerLayout.addWidget(self.deleteButton)
         mainLayout.addWidget(self.headerWidget)
 
-        # Content area
+        # Área de contenido: Connection Settings y Message Content
         self.contentWidget = QWidget()
         contentLayout = QVBoxLayout(self.contentWidget)
-
-        # Group: Connection Settings
+        # Grupo: Connection Settings
         self.connGroup = QGroupBox("Connection Settings")
         connLayout = QFormLayout()
         self.realmCombo = QComboBox()
         self.realmCombo.addItems(list(REALMS_CONFIG.keys()))
         self.realmCombo.setMinimumWidth(300)
         self.realmCombo.currentTextChanged.connect(self.updateTopics)
-
-        # Layout para agregar realm
-        realmAddLayout = QHBoxLayout()
         self.newRealmEdit = QLineEdit()
         self.newRealmEdit.setPlaceholderText("New realm")
-        realmAddLayout.addWidget(self.newRealmEdit)
-        realmAddLayout.addStretch()
         self.addRealmButton = QPushButton("Add")
-        self.addRealmButton.setStyleSheet("""
-            QPushButton {
-                background-color: #007ACC;
-                color: white;
-                border: none;
-                padding: 6px 12px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #005A9E;
-            }
-            QPushButton:pressed {
-                background-color: #004A80;
-            }
-        """)
         self.addRealmButton.clicked.connect(self.addRealm)
-        realmAddLayout.addWidget(self.addRealmButton)
-
-        connLayout.addRow("Realm:", self.realmCombo)
-        connLayout.addRow("", realmAddLayout)
-
+        realmLayout = QHBoxLayout()
+        realmLayout.addWidget(self.realmCombo)
+        realmLayout.addWidget(self.newRealmEdit)
+        realmLayout.addWidget(self.addRealmButton)
+        connLayout.addRow("Realm:", realmLayout)
         self.urlEdit = QLineEdit("ws://127.0.0.1:60001")
         connLayout.addRow("Router URL:", self.urlEdit)
-
         self.topicCombo = QComboBox()
         self.topicCombo.setEditable(True)
         self.topicCombo.addItems(REALMS_CONFIG.get(self.realmCombo.currentText(), {}).get("topics", []))
@@ -311,20 +280,17 @@ class MessageConfigWidget(QWidget):
         self.connGroup.setLayout(connLayout)
         contentLayout.addWidget(self.connGroup)
 
-        # Group: Message Content
+        # Grupo: Message Content
         self.contentGroup = QGroupBox("Message Content")
         contentGroupLayout = QVBoxLayout()
-
-        from .pubEditor import PublisherEditorWidget
         self.editorWidget = PublisherEditorWidget(parent=self)
         contentGroupLayout.addWidget(self.editorWidget)
         self.contentGroup.setLayout(contentGroupLayout)
         contentLayout.addWidget(self.contentGroup)
-
         self.contentWidget.setLayout(contentLayout)
         mainLayout.addWidget(self.contentWidget)
 
-        # Botón "Send Now"
+        # Botón "Send Now" de ancho completo
         self.sendNowButton = QPushButton("Send Now")
         self.sendNowButton.setStyleSheet("""
             QPushButton {
@@ -343,7 +309,6 @@ class MessageConfigWidget(QWidget):
         """)
         self.sendNowButton.clicked.connect(self.sendMessage)
         mainLayout.addWidget(self.sendNowButton)
-
         self.setLayout(mainLayout)
 
     def onEnableChanged(self, state):
@@ -356,9 +321,9 @@ class MessageConfigWidget(QWidget):
         if self.is_minimized:
             realm = self.realmCombo.currentText().strip()
             topic = self.topicCombo.currentText().strip()
-            if self.editorWidget.programadoRadio.isChecked():
+            if self.editorWidget.programmedRadio.isChecked():
                 mode = "Programmed"
-            elif self.editorWidget.tiempoSistemaRadio.isChecked():
+            elif self.editorWidget.SystemRadioTime.isChecked():
                 mode = "System Time"
             else:
                 mode = "On Demand"
@@ -370,13 +335,10 @@ class MessageConfigWidget(QWidget):
             self.minimizeButton.setText("–")
 
     def updateTimeField(self, checked):
-        # Si está en modo On-Demand, ponemos el campo de tiempo "inactivo" (o readOnly)
-        if self.editorWidget.onDemandRadio.isChecked():
-            self.editorWidget.commonTimeEdit.setReadOnly(True)
-            self.editorWidget.commonTimeEdit.setStyleSheet("QLineEdit { background-color: #007ACC; color: white; }")
+        if checked:
+            self.editorWidget.commonTimeEdit.setDisabled(True)
         else:
-            self.editorWidget.commonTimeEdit.setReadOnly(False)
-            self.editorWidget.commonTimeEdit.setStyleSheet("")
+            self.editorWidget.commonTimeEdit.setDisabled(False)
 
     def addRealm(self):
         new_realm = self.newRealmEdit.text().strip()
@@ -410,17 +372,16 @@ class MessageConfigWidget(QWidget):
         self.loop = None
 
     def sendMessage(self):
-        # Revisar modo
         if self.editorWidget.onDemandRadio.isChecked():
             delay = 0
-        elif self.editorWidget.programadoRadio.isChecked():
+        elif self.editorWidget.programmedRadio.isChecked():
             try:
                 h, m, s = map(int, self.editorWidget.commonTimeEdit.text().strip().split(":"))
                 delay = h * 3600 + m * 60 + s
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Invalid time for Programmed mode:\n{e}")
                 return
-        elif self.editorWidget.tiempoSistemaRadio.isChecked():
+        elif self.editorWidget.SystemRadioTime.isChecked():
             try:
                 h, m, s = map(int, self.editorWidget.commonTimeEdit.text().strip().split(":"))
             except Exception as e:
@@ -434,6 +395,7 @@ class MessageConfigWidget(QWidget):
         else:
             delay = 0
 
+        print(f"Sending message with delay {delay} seconds, mode: {'On Demand' if self.editorWidget.onDemandRadio.isChecked() else ('Programmed' if self.editorWidget.programmedRadio.isChecked() else 'System Time')}")
         topic = self.topicCombo.currentText().strip()
         try:
             data = json.loads(self.editorWidget.jsonPreview.toPlainText())
@@ -451,8 +413,6 @@ class MessageConfigWidget(QWidget):
         publish_time = datetime.datetime.now() + datetime.timedelta(seconds=delay)
         publish_time_str = publish_time.strftime("%Y-%m-%d %H:%M:%S")
         sent_message = json.dumps(data, indent=2, ensure_ascii=False)
-
-        # Registrar en el log
         publisherTab = self.parent()
         while publisherTab and not hasattr(publisherTab, "addPublisherLog"):
             publisherTab = publisherTab.parent()
@@ -460,9 +420,9 @@ class MessageConfigWidget(QWidget):
             publisherTab.addPublisherLog(self.realmCombo.currentText(), topic, publish_time_str, sent_message)
 
     def getConfig(self):
-        if self.editorWidget.programadoRadio.isChecked():
+        if self.editorWidget.programmedRadio.isChecked():
             mode = "programmed"
-        elif self.editorWidget.tiempoSistemaRadio.isChecked():
+        elif self.editorWidget.SystemRadioTime.isChecked():
             mode = "systemTime"
         else:
             mode = "onDemand"
@@ -476,9 +436,18 @@ class MessageConfigWidget(QWidget):
             "time": self.editorWidget.commonTimeEdit.text().strip()
         }
 
-###############################################################################
-# PublisherTab
-###############################################################################
+    def deleteSelf(self):
+        reply = QMessageBox.question(self, "Confirm Delete", f"Delete Message #{self.msg_id}?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            parent = self.parentWidget()
+            while parent is not None and not hasattr(parent, "removeMessageWidget"):
+                parent = parent.parentWidget()
+            if parent is not None:
+                parent.removeMessageWidget(self)
+
+# --------------------------
+# PUBLISHER TAB CLASS
+# --------------------------
 class PublisherTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -489,11 +458,10 @@ class PublisherTab(QWidget):
     def initUI(self):
         splitter = QSplitter(Qt.Horizontal)
 
-        # LEFT COLUMN
+        # LEFT COLUMN: Log viewer with "Start Publisher" and "Stop Publisher" buttons on top
         leftPanel = QWidget()
         leftLayout = QVBoxLayout(leftPanel)
 
-        # Botones: Start Publisher, Stop Publisher, Reset Log
         topButtonsLayout = QHBoxLayout()
         self.startPublisherButton = QPushButton("Start Publisher")
         self.startPublisherButton.setStyleSheet("""
@@ -516,17 +484,6 @@ class PublisherTab(QWidget):
         """)
         self.stopPublisherButton.setFixedHeight(40)
         topButtonsLayout.addWidget(self.stopPublisherButton)
-
-        self.resetLogButton = QPushButton("Reset Log")
-        self.resetLogButton.setStyleSheet("""
-            QPushButton {
-                background-color: #fd7e14;
-                color: white;
-                font-weight: bold;
-            }
-        """)
-        self.resetLogButton.setFixedHeight(40)
-        topButtonsLayout.addWidget(self.resetLogButton)
         topButtonsLayout.setSpacing(10)
         leftLayout.addLayout(topButtonsLayout)
 
@@ -534,7 +491,8 @@ class PublisherTab(QWidget):
         leftLayout.addWidget(self.viewer)
         splitter.addWidget(leftPanel)
 
-        # RIGHT COLUMN
+        # RIGHT COLUMN: "Add Message" button, scroll area for message configs,
+        # and bottom row for "Start Scenario" and "Send Instant Message"
         rightPanel = QWidget()
         rightLayout = QVBoxLayout(rightPanel)
 
@@ -552,7 +510,8 @@ class PublisherTab(QWidget):
         self.msgArea = QScrollArea()
         self.msgArea.setWidgetResizable(True)
         self.msgContainer = QWidget()
-        self.msgLayout = QVBoxLayout(self.msgContainer)
+        self.msgLayout = QVBoxLayout()
+        self.msgContainer.setLayout(self.msgLayout)
         self.msgArea.setWidget(self.msgContainer)
         rightLayout.addWidget(self.msgArea)
 
@@ -581,18 +540,31 @@ class PublisherTab(QWidget):
 
         splitter.addWidget(rightPanel)
         splitter.setSizes([300, 600])
-
         mainLayout = QVBoxLayout(self)
         mainLayout.addWidget(splitter)
         self.setLayout(mainLayout)
 
-        # Conectar señales
+        # Connect buttons
         self.addMessageButton.clicked.connect(self.addMessage)
         self.startPublisherButton.clicked.connect(self.confirmAndStartPublisher)
         self.stopPublisherButton.clicked.connect(self.stopAllPublishers)
-        self.resetLogButton.clicked.connect(self.resetLog)
         self.startScenarioButton.clicked.connect(self.startScenario)
         self.sendInstantButton.clicked.connect(self.sendAllAsync)
+
+    def removeMessageWidget(self, widget):
+        if widget in self.msgWidgets:
+            self.msgWidgets.remove(widget)
+            self.msgLayout.removeWidget(widget)
+            widget.deleteLater()
+
+    def addMessage(self):
+        widget = MessageConfigWidget(self.next_id, parent=self)
+        self.msgLayout.addWidget(widget)
+        self.msgWidgets.append(widget)
+        self.next_id += 1
+
+    def addPublisherLog(self, realm, topic, timestamp, details, error=False):
+        self.viewer.add_message(realm, topic, timestamp, details, error=error)
 
     def confirmAndStartPublisher(self):
         global global_pub_sessions
@@ -606,15 +578,6 @@ class PublisherTab(QWidget):
                 return
         self.startPublisher()
 
-    def addMessage(self):
-        widget = MessageConfigWidget(self.next_id, parent=self)
-        self.msgLayout.addWidget(widget)
-        self.msgWidgets.append(widget)
-        self.next_id += 1
-
-    def addPublisherLog(self, realm, topic, timestamp, details):
-        self.viewer.add_message(realm, topic, timestamp, details)
-
     def startPublisher(self):
         for widget in self.msgWidgets:
             if widget.session is not None:
@@ -625,8 +588,12 @@ class PublisherTab(QWidget):
 
     def logPublisherStarted(self, widget, config):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.addPublisherLog(config["realm"], config["topic"], timestamp, "Publisher started")
-        print("Publisher started:", config["realm"], config["topic"])
+        if widget.session is None:
+            self.addPublisherLog(config["realm"], config["topic"], timestamp, "Failed to connect publisher", error=True)
+            print("Failed to start publisher:", config["realm"], config["topic"])
+        else:
+            self.addPublisherLog(config["realm"], config["topic"], timestamp, "Publisher started")
+            print("Publisher started:", config["realm"], config["topic"])
 
     def stopAllPublishers(self):
         global global_pub_sessions
@@ -642,10 +609,6 @@ class PublisherTab(QWidget):
             except Exception as e:
                 print("Error stopping publisher session:", e)
             del global_pub_sessions[realm]
-
-    def resetLog(self):
-        self.viewer.table.setRowCount(0)
-        self.viewer.pubMessages = []
 
     def sendAllAsync(self):
         for widget in self.msgWidgets:
@@ -664,14 +627,14 @@ class PublisherTab(QWidget):
             config = widget.getConfig()
             if widget.editorWidget.onDemandRadio.isChecked():
                 delay = 0
-            elif widget.editorWidget.programadoRadio.isChecked():
+            elif widget.editorWidget.programmedRadio.isChecked():
                 try:
                     h, m, s = map(int, widget.editorWidget.commonTimeEdit.text().strip().split(":"))
                     delay = h * 3600 + m * 60 + s
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Invalid time for Programmed mode:\n{e}")
                     continue
-            elif widget.editorWidget.tiempoSistemaRadio.isChecked():
+            elif widget.editorWidget.SystemRadioTime.isChecked():
                 try:
                     h, m, s = map(int, widget.editorWidget.commonTimeEdit.text().strip().split(":"))
                 except Exception as e:
@@ -684,7 +647,6 @@ class PublisherTab(QWidget):
                 delay = (scheduled_time - now).total_seconds()
             else:
                 delay = 0
-
             if widget.session is None or widget.loop is None:
                 print("No active session in message", widget.msg_id)
                 continue
@@ -699,59 +661,79 @@ class PublisherTab(QWidget):
         print("Scenario: message sent on", config["topic"])
 
     def getProjectConfig(self):
-        scenarios = [widget.getConfig() for widget in self.msgWidgets]
-        return {"scenarios": scenarios}
-
-    def loadProject(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Select Project File", "", "JSON Files (*.json);;All Files (*)")
-        if not filepath:
-            return
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                project = json.load(f)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not load project:\n{e}")
-            return
-        pub_config = project.get("publisher", {})
-        self.loadProjectFromConfig(pub_config)
-        QMessageBox.information(self, "Project", "Project loaded successfully.")
-
-    def loadProjectFromConfig(self, pub_config):
-        scenarios = pub_config.get("scenarios", [])
-        self.msgWidgets = []
-        self.next_id = 1
-        while self.msgLayout.count():
-            item = self.msgLayout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        for scenario in scenarios:
-            widget = MessageConfigWidget(self.next_id, parent=self)
-            widget.realmCombo.setCurrentText(scenario.get("realm", "default"))
-            widget.urlEdit.setText(scenario.get("router_url", "ws://127.0.0.1:60001"))
-            widget.topicCombo.setCurrentText(scenario.get("topic", ""))
-            widget.editorWidget.jsonPreview.setPlainText(
-                json.dumps(scenario.get("content", {}), indent=2, ensure_ascii=False)
-            )
-            widget.editorWidget.commonTimeEdit.setText(scenario.get("time", "00:00:00"))
-            mode = scenario.get("mode", "onDemand")
-            if mode == "programmed":
-                widget.editorWidget.programadoRadio.setChecked(True)
-            elif mode == "systemTime":
-                widget.editorWidget.tiempoSistemaRadio.setChecked(True)
-            else:
-                widget.editorWidget.onDemandRadio.setChecked(True)
-            self.msgLayout.addWidget(widget)
-            self.msgWidgets.append(widget)
-            self.next_id += 1
+        """
+        Recopila todos los escenarios en un dict serializable:
+        { "scenarios": [ {...}, {...}, ... ] }
+        """
+        return {'scenarios': [w.getConfig() for w in self.msgWidgets]}
 
     def saveProject(self):
-        project_config = {"publisher": self.getProjectConfig()}
-        filepath, _ = QFileDialog.getSaveFileName(self, "Save Project", "", "JSON Files (*.json);;All Files (*)")
+        """
+        Guarda la configuración completa de Publisher en /projects/publisher.
+        """
+        base_dir = os.path.dirname(self.get_config_path(''))
+        
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save Publisher Config", base_dir, "JSON Files (*.json)"
+        )
         if not filepath:
             return
         try:
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(project_config, f, indent=2, ensure_ascii=False)
-            QMessageBox.information(self, "Project", "Project saved successfully.")
+            cfg = self.getProjectConfig()
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            QMessageBox.information(self, "Publisher", "Configuration saved.")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not save project:\n{e}")
+            QMessageBox.critical(self, "Error", f"Could not save:\n{e}")
+
+    def loadProject(self):
+        """
+        Carga la configuración de Publisher desde /projects/publisher.
+        """
+        base_dir = os.path.dirname(self.get_config_path(''))
+        
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Load Publisher Config", base_dir, "JSON Files (*.json)"
+        )
+        if not filepath:
+            return
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+            self.loadProjectFromConfig(cfg)
+            QMessageBox.information(self, "Publisher", "Configuration loaded.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not load:\n{e}")
+
+    def loadProjectFromConfig(self, config):
+        """
+        Aplica un dict {'scenarios': [...]} a la UI,
+        recreando los MessageConfigWidget.
+        """
+        scenarios = config.get('scenarios', [])
+        # Limpia la UI
+        for w in list(self.msgWidgets):
+            w.deleteLater()
+        self.msgWidgets.clear()
+        self.next_id = 1
+
+        # Crea widgets según cada escenario
+        for sc in scenarios:
+            w = MessageConfigWidget(self.next_id, parent=self)
+            w.realmCombo.setCurrentText(sc.get('realm', ''))
+            w.urlEdit.setText(sc.get('router_url', ''))
+            w.topicCombo.setCurrentText(sc.get('topic', ''))
+            w.editor.jsonPreview.setPlainText(
+                json.dumps(sc.get('content', {}), indent=2, ensure_ascii=False)
+            )
+            w.editor.commonTimeEdit.setText(sc.get('time', '00:00:00'))
+            mode = sc.get('mode', 'onDemand')
+            if mode == 'programmed':
+                w.editor.programmedRadio.setChecked(True)
+            elif mode == 'systemTime':
+                w.editor.SystemRadioTime.setChecked(True)
+            else:
+                w.editor.onDemandRadio.setChecked(True)
+            self.msgLayout.addWidget(w)
+            self.msgWidgets.append(w)
+            self.next_id += 1

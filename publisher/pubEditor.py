@@ -1,3 +1,4 @@
+
 import json
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -25,8 +26,8 @@ class PublisherEditorWidget(QWidget):
         timeModeLayout.addWidget(self.commonTimeEdit)
         from PyQt5.QtWidgets import QRadioButton
         self.onDemandRadio = QRadioButton("On-Demand")
-        self.programmedRadio = QRadioButton("Programmed")      # renombrado
-        self.SystemRadioTime = QRadioButton("System Time")     # renombrado
+        self.programmedRadio = QRadioButton("Programmed")      
+        self.SystemRadioTime = QRadioButton("System Time")    
         self.onDemandRadio.setChecked(True)
         timeModeLayout.addWidget(self.onDemandRadio)
         timeModeLayout.addWidget(self.programmedRadio)

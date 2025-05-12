@@ -1,88 +1,86 @@
 import os
 import json
-import datetime
 import logging
-import sys
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QFileDialog, QMessageBox, QTreeWidget, QTreeWidgetItem
+from datetime import datetime
+from PyQt5.QtWidgets import (
+    QDialog, QMessageBox, QTreeWidget, QTreeWidgetItem,
+    QVBoxLayout, QPushButton, QTextEdit, QTabWidget, QWidget, QApplication
+)
 
-# Determinar la ruta base: 
-# Si se ejecuta como ejecutable (sys.frozen=True) usamos la carpeta del ejecutable,
-# de lo contrario, usamos la raíz del proyecto (asumida en el directorio superior al de este archivo).
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# -------------------------------------------------------------------------
+# Configuración de carpeta y fichero de logs
+# -------------------------------------------------------------------------
+# Directorio base del proyecto
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Directorio para logs
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+# Crear directorio si no existe
+os.makedirs(LOG_DIR, exist_ok=True)
+# Nombre de fichero con fecha y hora actuales
+LOGFILE = os.path.join(
+    LOG_DIR,
+    datetime.now().strftime('%Y%m%d_%H%M%S') + '.json'
+)
 
-# Definir el directorio de logs en la raíz del proyecto, en una carpeta "logs"
-LOG_DIR = os.path.join(BASE_DIR, "logs")
-if not os.path.exists(LOG_DIR):
-    os.makedirs(LOG_DIR)
+# Inicializar fichero con plantilla si no existe
+if not os.path.exists(LOGFILE):
+    initial = {
+        "comments": "Registro de mensajes WAMP",
+        "source": {"version": "1.0", "tool": "wamPy Tester"},
+        "defaulttimeformat": "%Y-%m-%d %H:%M:%S",
+        "msg_list": []
+    }
+    try:
+        with open(LOGFILE, 'w', encoding='utf-8') as f:
+            json.dump(initial, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logging.error(f"No se pudo crear el fichero de logs: {e}")
 
-# Crear un nombre para el fichero de log basado en la fecha y hora actuales
-LOG_FILENAME = os.path.join(LOG_DIR, f"log_{datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')}.txt")
-
-# Configurar el logger
-logger = logging.getLogger("FileLogger")
-logger.setLevel(logging.INFO)
-
-# Crear un FileHandler para escribir en el archivo de log, usando UTF-8
-file_handler = logging.FileHandler(LOG_FILENAME, encoding="utf-8")
-formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-def log_to_file(time_str, realm, topic, message_json):
+# -------------------------------------------------------------------------
+# Función para registrar mensajes en el JSON de logs
+# -------------------------------------------------------------------------
+def log_to_file(timestamp, realm, topic, ip_source, ip_dest, payload):
     """
-    Escribe una entrada en el log con el siguiente formato:
-    
-    [time_str] | Realm: [realm] | Topic: [topic]
-    [message_json formateado]
-    
-    Se añade una línea en blanco al final para separar entradas.
+    Añade una entrada a LOGFILE en "msg_list" con campos:
+      - timestamp: { date, time }
+      - realm, topic
+      - ip_source, ip_dest
+      - payload (dict o raw)
     """
-    entry = f"{time_str} | Realm: {realm} | Topic: {topic}\n{message_json}\n\n"
-    logger.info(entry)
+    # separar fecha y hora
+    try:
+        date_str, time_str = timestamp.split(' ', 1)
+    except ValueError:
+        date_str, time_str = timestamp, ''
 
-class JsonDetailDialog(QDialog):
-    """
-    Diálogo para mostrar el contenido del JSON formateado.
-    """
-    def __init__(self, message_details, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Detalle JSON")
-        self.resize(600, 400)
-        layout = QVBoxLayout(self)
-        self.textEdit = QTextEdit(self)
-        self.textEdit.setReadOnly(True)
-        json_str = json.dumps(message_details, indent=2, ensure_ascii=False)
-        self.textEdit.setPlainText(json_str)
-        layout.addWidget(self.textEdit)
-        self.setLayout(layout)
+    # cargar datos existentes
+    try:
+        with open(LOGFILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        logging.error(f"Error leyendo {LOGFILE}: {e}")
+        return
 
-def build_tree_items(data):
-    """
-    Construye recursivamente una lista de QTreeWidgetItem a partir de un diccionario o lista.
-    Cada item muestra la clave en la primera columna y, si es un valor simple, lo muestra en la segunda.
-    """
-    items = []
-    if isinstance(data, dict):
-        for key, value in data.items():
-            item = QTreeWidgetItem([str(key), ""])
-            if isinstance(value, (dict, list)):
-                children = build_tree_items(value)
-                item.addChildren(children)
-            else:
-                item.setText(1, str(value))
-            items.append(item)
-    elif isinstance(data, list):
-        for i, value in enumerate(data):
-            item = QTreeWidgetItem([f"[{i}]", ""])
-            if isinstance(value, (dict, list)):
-                children = build_tree_items(value)
-                item.addChildren(children)
-            else:
-                item.setText(1, str(value))
-            items.append(item)
-    else:
-        items.append(QTreeWidgetItem([str(data), ""]))
-    return items
+    # asegurar lista
+    entries = data.get('msg_list')
+    if not isinstance(entries, list):
+        entries = []
+        data['msg_list'] = entries
+
+    # construir entrada
+    entry = {
+        'timestamp': {'date': date_str, 'time': time_str},
+        'realm': realm,
+        'topic': topic,
+        'ip_source': ip_source or '',
+        'ip_dest': ip_dest or '',
+        'payload': payload if isinstance(payload, dict) else {'raw': str(payload)}
+    }
+    entries.append(entry)
+
+    # guardar de vuelta
+    try:
+        with open(LOGFILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logging.error(f"Error escribiendo en {LOGFILE}: {e}")

@@ -1,0 +1,60 @@
+{
+  "comments": "Registro de mensajes WAMP",
+  "source": {
+    "version": "",
+    "tool": ""
+  },
+  "defaulttimeformat": "%Y-%m-%d %H:%M:%S",
+  "msg_list": [
+    {
+      "timestamp": {
+        "date": "2025-05-12",
+        "time": "20:21:41"
+      },
+      "realm": "default",
+      "topic": "Subscription",
+      "ip_source": "",
+      "ip_dest": "",
+      "payload": {
+        "raw": "[]"
+      }
+    },
+    {
+      "timestamp": {
+        "date": "2025-05-12",
+        "time": "20:21:42"
+      },
+      "realm": "default2",
+      "topic": "Subscription",
+      "ip_source": "",
+      "ip_dest": "",
+      "payload": {
+        "raw": "[]"
+      }
+    },
+    {
+      "timestamp": {
+        "date": "2025-05-12",
+        "time": "20:22:12"
+      },
+      "realm": "default",
+      "topic": "MsgEP",
+      "ip_source": "",
+      "ip_dest": "",
+      "payload": {}
+    },
+    {
+      "timestamp": {
+        "date": "2025-05-12",
+        "time": "20:22:12"
+      },
+      "realm": "default",
+      "topic": "MsgEP",
+      "ip_source": "",
+      "ip_dest": "",
+      "payload": {
+        "raw": "()"
+      }
+    }
+  ]
+}

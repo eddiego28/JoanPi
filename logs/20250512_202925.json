@@ -1,0 +1,43 @@
+{
+  "comments": "Registro de mensajes WAMP",
+  "source": {
+    "version": "1.0",
+    "tool": "wamPy Tester"
+  },
+  "defaulttimeformat": "%Y-%m-%d %H:%M:%S",
+  "msg_list": [
+    {
+      "timestamp": {
+        "date": "2025-05-12",
+        "time": "20:29:36"
+      },
+      "realm": "default",
+      "topic": "MsgEP",
+      "ip_source": "",
+      "ip_dest": "",
+      "payload": {}
+    },
+    {
+      "timestamp": {
+        "date": "2025-05-12",
+        "time": "20:29:38"
+      },
+      "realm": "default",
+      "topic": "MsgEP",
+      "ip_source": "",
+      "ip_dest": "",
+      "payload": {}
+    },
+    {
+      "timestamp": {
+        "date": "2025-05-12",
+        "time": "20:29:39"
+      },
+      "realm": "default",
+      "topic": "MsgEP",
+      "ip_source": "",
+      "ip_dest": "",
+      "payload": {}
+    }
+  ]
+}

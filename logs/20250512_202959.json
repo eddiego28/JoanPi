@@ -1,0 +1,9 @@
+{
+  "comments": "Registro de mensajes WAMP",
+  "source": {
+    "version": "1.0",
+    "tool": "wamPy Tester"
+  },
+  "defaulttimeformat": "%Y-%m-%d %H:%M:%S",
+  "msg_list": []
+}
